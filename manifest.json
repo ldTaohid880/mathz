@@ -1,0 +1,11 @@
+{
+	"id": "mathz",
+	"name": "Mathz",
+	"version": "1.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "Plot equations from ```mathz code blocks.",
+	"author": "Md. Mahadi Hasan",
+	"authorUrl": "https://mhassan.me",
+	"fundingUrl": "https://obsidian.md/pricing",
+	"isDesktopOnly": false
+}
