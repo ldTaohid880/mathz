@@ -1,0 +1,29 @@
+{
+	"name": "mathz",
+	"version": "1.0.0",
+	"description": "Plot equations from ```mathz code blocks.",
+	"main": "main.js",
+	"type": "module",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"typecheck": "tsc -noEmit -skipLibCheck",
+		"lint": "eslint src tests",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"@typescript-eslint/eslint-plugin": "^7.1.0",
+		"@typescript-eslint/parser": "^7.1.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.20.1",
+		"eslint": "^8.57.0",
+		"eslint-plugin-import": "^2.29.1",
+		"obsidian": "^1.5.7",
+		"tslib": "^2.6.2",
+		"typescript": "^5.3.3",
+		"vitest": "^1.3.1"
+	}
+}
