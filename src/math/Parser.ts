@@ -2,12 +2,21 @@ import { AstNode } from "./AstNode";
 import { IFunctionLibrary } from "./IFunctionLibrary";
 import { Token } from "./Token";
 
+export interface UserFunctionSignatures {
+	readonly [name: string]: number; // name -> arity
+}
+
 export interface IParser {
 	/**
 	 * Parses a token stream (from `ITokenizer`) into an AST. `variableNames`
 	 * are the only bare identifiers allowed besides known functions/constants.
 	 */
-	parse(tokens: Token[], variableNames: readonly string[]): AstNode;
+	parse(
+		tokens: Token[],
+		variableNames: readonly string[],
+		userFunctions?: Readonly<Record<string, number>> | ReadonlyMap<string, number>,
+		isFunctionBody?: boolean,
+	): AstNode;
 }
 
 /**
@@ -16,12 +25,22 @@ export interface IParser {
  *   term   := unary (("*" | "/") unary | unary)*      // trailing unary = implicit multiplication
  *   unary  := ("-" | "+")? power
  *   power  := primary ("^" unary)?
- *   primary:= number | "(" expr ")" | func "(" expr ")" | constant | variable
+ *   primary:= number | "(" expr ")" | func "(" expr ")" | userFunc "(" expr {, expr} ")" | constant | variable
  */
 export class Parser implements IParser {
 	constructor(private readonly functions: IFunctionLibrary) {}
 
-	public parse(tokens: Token[], variableNames: readonly string[]): AstNode {
+	public parse(
+		tokens: Token[],
+		variableNames: readonly string[],
+		userFunctions?: Readonly<Record<string, number>> | ReadonlyMap<string, number>,
+		isFunctionBody = false,
+	): AstNode {
+		const userFuncMap: ReadonlyMap<string, number> =
+			userFunctions instanceof Map
+				? userFunctions
+				: new Map(Object.entries(userFunctions ?? {}));
+
 		let pos = 0;
 		const peek = (): Token => tokens[pos];
 		const next = (): Token => tokens[pos++];
@@ -91,19 +110,59 @@ export class Parser implements IParser {
 			}
 
 			if (tok.type === "identifier") {
-				if (this.functions.hasFunction(tok.value)) {
-					if (next().type !== "lparen") throw new Error(`Expected ( after ${tok.value}`);
+				const name = tok.value;
+
+				// Built-in function call
+				if (this.functions.hasFunction(name)) {
+					if (next().type !== "lparen") throw new Error(`Expected ( after ${name}`);
 					const arg = expr();
 					if (next().type !== "rparen") throw new Error("Missing closing )");
-					return { kind: "call", fn: this.functions.getFunction(tok.value), arg };
+					return { kind: "call", fn: this.functions.getFunction(name), arg };
 				}
-				if (this.functions.hasConstant(tok.value)) {
-					return { kind: "constant", value: this.functions.getConstant(tok.value) };
+
+				// User function call: identifier followed by (
+				if (userFuncMap.has(name) && peek().type === "lparen") {
+					next(); // consume '('
+					const expectedArity = userFuncMap.get(name)!;
+					const args: AstNode[] = [];
+
+					if (peek().type !== "rparen") {
+						for (;;) {
+							args.push(expr());
+							if (peek().type === "comma") {
+								next(); // consume ','
+							} else {
+								break;
+							}
+						}
+					}
+
+					if (next().type !== "rparen") throw new Error("Missing closing )");
+
+					if (args.length === 0) {
+						throw new Error(`Zero arguments are invalid for function ${name}`);
+					}
+
+					if (args.length !== expectedArity) {
+						const pluralExpected = `${expectedArity} argument${expectedArity === 1 ? '' : 's'}`;
+						throw new Error(`${name} expects ${pluralExpected}, got ${args.length}`);
+					}
+
+					return { kind: "userCall", name, args };
 				}
-				if (variableNames.includes(tok.value)) {
-					return { kind: "variable", name: tok.value };
+
+				if (this.functions.hasConstant(name)) {
+					return { kind: "constant", value: this.functions.getConstant(name) };
 				}
-				throw new Error(`Unknown name "${tok.value}". Declare it with @slider ${tok.value} = 1 [min, max]`);
+				if (variableNames.includes(name)) {
+					return { kind: "variable", name };
+				}
+
+				if (isFunctionBody) {
+					throw new Error(`Unknown name "${name}". Declare it with @slider, or add it as a parameter`);
+				}
+
+				throw new Error(`Unknown name "${name}". Declare it with @slider ${name} = 1 [min, max]`);
 			}
 
 			throw new Error(`Unexpected "${tok.value}"`);

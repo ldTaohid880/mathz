@@ -1,3 +1,4 @@
+import { StatementClassifier } from '../statements/StatementClassifier';
 import { DisposableStore } from '../core/DisposableStore';
 import { IDisposable } from '../core/IDisposable';
 import { ILogger } from '../core/ILogger';
@@ -13,8 +14,9 @@ import { RendererRegistry } from '../graph/RendererRegistry';
 import { ViewTransform } from '../graph/ViewTransform';
 import { IBlockStateCache } from '../statements/BlockStateCache';
 import { ParameterStore } from '../statements/ParameterStore';
-import { isParseError, ISliderParser, SliderDeclaration } from '../statements/SliderDeclaration';
+import { isParseError, ISliderParser } from '../statements/SliderDeclaration';
 import type { Statement } from '../statements/Statement';
+import { UserFunctionStore } from '../statements/UserFunctionStore';
 import type { IStatementClassifier } from '../statements/StatementClassifier';
 import type { BlockLocation, INoteWriter } from './INoteWriter';
 import type { INotifier } from './INotifier';
@@ -35,6 +37,8 @@ interface ValidEntry {
 	chip: HTMLElement;
 	hidden: boolean;
 }
+
+import { IFunctionLibrary } from '../math/IFunctionLibrary';
 
 export class MathzBlockController implements IMathzBlockController {
 	private readonly store = new DisposableStore();
@@ -62,6 +66,7 @@ export class MathzBlockController implements IMathzBlockController {
 		private readonly scheduler: IScheduler,
 		private readonly logger: ILogger,
 		private readonly themeProvider: IThemeProvider,
+		private readonly functions: IFunctionLibrary,
 		private readonly noteWriter?: INoteWriter,
 		private readonly notifier?: INotifier,
 		private readonly stateCache?: IBlockStateCache,
@@ -256,10 +261,11 @@ export class MathzBlockController implements IMathzBlockController {
 	public reload(source: string): void {
 		this.currentSource = source;
 
-		// 1. Parse @slider lines
 		const lines = source.split(/\r?\n/);
-		const sliderDecls: SliderDeclaration[] = [];
-		const sliderErrors: Array<{ line: string; error: string }> = [];
+
+		// Pass 1: Parse sliders
+		const sliderDecls = [];
+		const sliderErrors = [];
 		const seenSliderNames = new Set<string>();
 
 		for (const rawLine of lines) {
@@ -281,17 +287,14 @@ export class MathzBlockController implements IMathzBlockController {
 			}
 		}
 
-		// Update parameter store: keeps existing values clamped, uses declared for new, drops removed
 		this.parameterStore.setDeclarations(sliderDecls, true);
 		this.sliderPanel.render();
 
-		// 2. Clear old equation list DOM
 		while (this.listEl.firstChild) {
 			this.listEl.removeChild(this.listEl.firstChild);
 		}
 		this.validEntries = [];
 
-		// Render slider errors if any
 		for (const { line, error } of sliderErrors) {
 			const errChip = this.listEl.createEl('li', { cls: 'mathz-chip mathz-error' });
 			errChip.createSpan({ cls: 'mathz-swatch' });
@@ -299,22 +302,160 @@ export class MathzBlockController implements IMathzBlockController {
 			errChip.createEl('small', { text: error });
 		}
 
-		// 3. Parse equations
+		// Pass 2: Collect function headers
 		const extraVariables = Array.from(seenSliderNames);
+		const userFunctions = new UserFunctionStore();
+		
+		const parsedHeaders: Array<{ name: string, params: string[], line: string, rhsRaw: string, error?: string }> = [];
+		const statementLines: string[] = [];
+
 		for (const rawLine of lines) {
 			const line = rawLine.trim();
-			if (!line || line.startsWith('#') || line.startsWith('@slider')) {
+			if (!line || line.startsWith('#') || line.startsWith('@slider')) continue;
+
+			if (line.includes('=')) {
+				const eqIdx = line.indexOf('=');
+				const lhsRaw = line.slice(0, eqIdx).trim();
+				const rhsRaw = line.slice(eqIdx + 1).trim();
+				const fnHeader = StatementClassifier.parseFunctionHeader(lhsRaw);
+				if (fnHeader) {
+					parsedHeaders.push({ name: fnHeader.name, params: fnHeader.params, line, rhsRaw });
+					continue;
+				}
+			}
+			statementLines.push(line);
+		}
+
+		// Pass 3: Validate headers
+		const funcNames = new Set<string>();
+		for (const header of parsedHeaders) {
+			if (this.functions.names.has(header.name) || header.name === 'x' || header.name === 'y' || header.name === 'r' || header.name === 'theta' || header.name === 't') {
+				header.error = `Reserved name: ${header.name}`;
+			} else if (seenSliderNames.has(header.name)) {
+				header.error = `Name collision with slider: ${header.name}`;
+			} else if (funcNames.has(header.name)) {
+				header.error = `Duplicate function definition: ${header.name}`;
+			} else {
+				const paramSet = new Set(header.params);
+				if (paramSet.size !== header.params.length) {
+					header.error = `Duplicate parameters in function: ${header.name}`;
+				} else {
+					funcNames.add(header.name);
+				}
+			}
+		}
+
+		// Tell parser about all arities (including errors, so it can just error on body instead of missing arity)
+		const userFuncArities = new Map<string, number>();
+		for (const header of parsedHeaders) {
+			if (!header.error) {
+				userFuncArities.set(header.name, header.params.length);
+			}
+		}
+
+		// Pass 4: Compile bodies
+		for (const header of parsedHeaders) {
+			if (header.error) {
+				// Don't compile if header is invalid
+				userFunctions.define({ name: header.name, params: header.params, body: null as any, source: header.line, error: header.error });
 				continue;
 			}
+			
+			try {
+				// Use classifier just to compile the body
+				const body = this.classifier.classify(`${header.name}(${header.params.join(', ')}) = ${header.rhsRaw}`, {
+					extraVariables: extraVariables,
+					userFunctions: userFuncArities,
+					userFunctionStore: userFunctions,
+					isFunctionDefinition: true
+				});
+				if (body.kind === 'function') {
+					userFunctions.define({
+						name: header.name,
+						params: header.params,
+						body: body.body,
+						source: header.line
+					});
+				}
+			} catch (err: unknown) {
+				const message = err instanceof Error ? err.message : String(err);
+				userFunctions.define({ name: header.name, params: header.params, body: null as any, source: header.line, error: message });
+			}
+		}
 
+		// Pass 5: Detect cycles
+		const visited = new Set<string>();
+		const visiting = new Set<string>();
+		
+		const dfs = (name: string, path: string[]): boolean => {
+			if (visiting.has(name)) {
+				const startIdx = path.indexOf(name);
+				const cycle = path.slice(startIdx).concat(name).join(' → ');
+				const def = userFunctions.get(name);
+				if (def) {
+					(def as any).error = `Circular definition: ${cycle}`;
+				}
+				return true;
+			}
+			if (visited.has(name)) return false;
+
+			visiting.add(name);
+			path.push(name);
+
+			const def = userFunctions.get(name);
+			if (def && !def.error && def.body && def.body.calledFunctions) {
+				for (const callee of def.body.calledFunctions) {
+					if (dfs(callee, path)) return true;
+				}
+			}
+
+			path.pop();
+			visiting.delete(name);
+			visited.add(name);
+			return false;
+		};
+
+		for (const name of userFunctions.names()) {
+			dfs(name, []);
+		}
+
+		// Render function statements as chips with "ƒ"
+		for (const header of parsedHeaders) {
+			const def = userFunctions.get(header.name);
+			const chip = this.listEl.createEl('li', { cls: 'mathz-chip mathz-def' });
+			chip.createSpan({ cls: 'mathz-swatch' });
+			const code = chip.createEl('code');
+			code.createSpan({ text: 'ƒ', cls: 'mathz-def-glyph' }); // or just prepend to text
+			code.appendText(` ${header.line}`);
+			
+			if (def && def.error) {
+				chip.addClass('mathz-error');
+				chip.createEl('small', { text: def.error });
+			} else {
+				// Valid definition
+				this.validEntries.push({
+					rawText: header.line,
+					statement: { kind: 'function', name: header.name, params: header.params, body: def!.body, source: header.line },
+					chip,
+					hidden: false // def chips are not toggleable
+				});
+			}
+		}
+
+		// Pass 6: Classify other statements
+		for (const line of statementLines) {
 			const chip = this.listEl.createEl('li', { cls: 'mathz-chip' });
 			chip.createSpan({ cls: 'mathz-swatch' });
 			chip.createEl('code', { text: line });
 
 			try {
-				const statement = this.classifier.classify(line, extraVariables);
+				const statement = this.classifier.classify(line, {
+					extraVariables,
+					userFunctions: userFuncArities,
+					userFunctionStore: userFunctions
+				});
 				const wasHidden = this.hiddenStateByText.get(line) ?? false;
-				const entry: ValidEntry = {
+				const entry = {
 					rawText: line,
 					statement,
 					chip,
@@ -452,6 +593,7 @@ export class MathzBlockFactory implements IMathzBlockFactory {
 		private readonly scheduler: IScheduler,
 		private readonly logger: ILogger,
 		private readonly themeProvider: IThemeProvider,
+		private readonly functions: IFunctionLibrary,
 		private readonly noteWriter?: INoteWriter,
 		private readonly notifier?: INotifier,
 		private readonly stateCache?: IBlockStateCache,
@@ -468,6 +610,7 @@ export class MathzBlockFactory implements IMathzBlockFactory {
 			this.scheduler,
 			this.logger,
 			this.themeProvider,
+			this.functions,
 			this.noteWriter,
 			this.notifier,
 			this.stateCache,

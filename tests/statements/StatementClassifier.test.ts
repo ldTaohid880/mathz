@@ -78,4 +78,75 @@ describe("StatementClassifier", () => {
 			'Parametric form needs both "x = ..." and "y = ..."',
 		);
 	});
+
+	describe("point statements", () => {
+		it("accepts (2, 3)", () => {
+			const s = makeClassifier().classify("(2, 3)");
+			expect(s.kind).toBe("point");
+			if (s.kind === "point") {
+				expect(s.points).toHaveLength(1);
+				expect(s.points[0].x.evaluate({})).toBe(2);
+				expect(s.points[0].y.evaluate({})).toBe(3);
+				expect(s.label).toBeUndefined();
+			}
+		});
+
+		it("accepts (1,1), (2,4)", () => {
+			const s = makeClassifier().classify("(1,1), (2,4)");
+			expect(s.kind).toBe("point");
+			if (s.kind === "point") {
+				expect(s.points).toHaveLength(2);
+				expect(s.points[0].x.evaluate({})).toBe(1);
+				expect(s.points[0].y.evaluate({})).toBe(1);
+				expect(s.points[1].x.evaluate({})).toBe(2);
+				expect(s.points[1].y.evaluate({})).toBe(4);
+			}
+		});
+
+		it('accepts (a, a^2) "P" with declared variable a', () => {
+			const s = makeClassifier().classify('(a, a^2) "P"', ['a']);
+			expect(s.kind).toBe("point");
+			if (s.kind === "point") {
+				expect(s.points).toHaveLength(1);
+				expect(s.points[0].x.evaluate({ a: 3 })).toBe(3);
+				expect(s.points[0].y.evaluate({ a: 3 })).toBe(9);
+				expect(s.label).toBe("P");
+			}
+		});
+
+		it("rejects (1, 2, 3) with clear error", () => {
+			expect(() => makeClassifier().classify("(1, 2, 3)")).toThrow(
+				"A point needs two coordinates: (x, y)",
+			);
+		});
+
+		it("rejects (x, 2) because points cannot use x or y", () => {
+			expect(() => makeClassifier().classify("(x, 2)")).toThrow(
+				"Points can't use x or y.",
+			);
+		});
+
+		it("rejects (1, 2 without closing paren", () => {
+			expect(() => makeClassifier().classify("(1, 2")).toThrow(
+				"A point needs two coordinates: (x, y)",
+			);
+		});
+
+		it("rejects unterminated label", () => {
+			expect(() => makeClassifier().classify('(1, 2) "P')).toThrow(
+				"Unterminated string label in point statement",
+			);
+		});
+
+		it("does not classify y = (x+1) as points", () => {
+			const s = makeClassifier().classify("y = (x+1)");
+			expect(s.kind).toBe("explicit");
+		});
+
+		it("does not classify (x+1)^2 as points (treated as equation attempt with error)", () => {
+			expect(() => makeClassifier().classify("(x+1)^2")).toThrow(
+				'Use the form "y = ..." or "x^2 + y^2 = 25"',
+			);
+		});
+	});
 });

@@ -4,6 +4,8 @@ import { ConsoleLogger } from './core/ConsoleLogger';
 import { ExplicitRenderer } from './graph/renderers/ExplicitRenderer';
 import { ImplicitRenderer } from './graph/renderers/ImplicitRenderer';
 import { ParametricRenderer } from './graph/renderers/ParametricRenderer';
+import { PointRenderer } from './graph/renderers/PointRenderer';
+import { FunctionDefinitionRenderer } from './graph/renderers/FunctionDefinitionRenderer';
 import { PolarRenderer } from './graph/renderers/PolarRenderer';
 import { RendererRegistry } from './graph/RendererRegistry';
 import { Evaluator } from './math/Evaluator';
@@ -44,7 +46,9 @@ export class CompositionRoot {
 		const implicit = new ImplicitRenderer();
 		const polar = new PolarRenderer();
 		const parametric = new ParametricRenderer();
-		const registry = new RendererRegistry(explicit, implicit, polar, parametric);
+		const point = new PointRenderer();
+		const funcDef = new FunctionDefinitionRenderer();
+		const registry = new RendererRegistry(explicit, implicit, polar, parametric, point, funcDef);
 
 		return new MathzBlockFactory(
 			classifier,
@@ -53,6 +57,7 @@ export class CompositionRoot {
 			scheduler,
 			logger,
 			themeProvider,
+			functionLibrary,
 			noteWriter,
 			notifier,
 			this.blockStateCache,

@@ -28,8 +28,31 @@ export interface ImplicitStatement {
 	readonly right: CompiledExpression;
 }
 
+/** One or more discrete points `(x, y)` plotted with optional label. */
+export interface PointStatement {
+	readonly kind: 'point';
+	readonly source: string;
+	readonly points: ReadonlyArray<{
+		readonly x: CompiledExpression;
+		readonly y: CompiledExpression;
+	}>;
+	readonly label?: string;
+}
+
+/** User-defined function definition `f(x) = expr`. */
+export interface FunctionStatement {
+	readonly kind: 'function';
+	readonly name: string;
+	readonly params: readonly string[];
+	readonly body: CompiledExpression;
+	readonly source: string;
+	readonly error?: string;
+}
+
 export type Statement =
 	| ExplicitStatement
 	| PolarStatement
 	| ParametricStatement
-	| ImplicitStatement;
+	| ImplicitStatement
+	| PointStatement
+	| FunctionStatement;

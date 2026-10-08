@@ -217,3 +217,12 @@
 		transition: none;
 	}
 }
+
+
+/* Function definition chip */
+.mathz-def {
+	color: var(--text-muted);
+	cursor: default;
+	transform: none;
+	transition: none;
+}
