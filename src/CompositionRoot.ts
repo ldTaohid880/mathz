@@ -11,16 +11,25 @@ import { ExpressionCompiler } from './math/ExpressionCompiler';
 import { FunctionLibrary } from './math/FunctionLibrary';
 import { Parser } from './math/Parser';
 import { Tokenizer } from './math/Tokenizer';
+import { ObsidianNoteWriter } from './obsidian/ObsidianNoteWriter';
+import { ObsidianNotifier } from './obsidian/ObsidianNotifier';
+import { ObsidianThemeProvider } from './obsidian/ObsidianThemeProvider';
+import { BlockStateCache } from './statements/BlockStateCache';
 import { SliderParser } from './statements/SliderDeclaration';
 import { StatementClassifier } from './statements/StatementClassifier';
 import { MathzBlockFactory } from './ui/MathzBlockFactory';
 
 export class CompositionRoot {
+	private readonly blockStateCache = new BlockStateCache();
+
 	public constructor(private readonly app: App) {}
 
 	public createBlockFactory(): MathzBlockFactory {
 		const logger = new ConsoleLogger();
 		const scheduler = new BrowserScheduler();
+		const notifier = new ObsidianNotifier();
+		const noteWriter = new ObsidianNoteWriter(this.app);
+		const themeProvider = new ObsidianThemeProvider(this.app);
 
 		const functionLibrary = new FunctionLibrary();
 		const tokenizer = new Tokenizer();
@@ -37,6 +46,16 @@ export class CompositionRoot {
 		const parametric = new ParametricRenderer();
 		const registry = new RendererRegistry(explicit, implicit, polar, parametric);
 
-		return new MathzBlockFactory(classifier, sliderParser, registry, scheduler, logger, this.app);
+		return new MathzBlockFactory(
+			classifier,
+			sliderParser,
+			registry,
+			scheduler,
+			logger,
+			themeProvider,
+			noteWriter,
+			notifier,
+			this.blockStateCache,
+		);
 	}
 }

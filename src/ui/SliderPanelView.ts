@@ -4,17 +4,29 @@ import type { IParameterStore } from '../statements/IParameterStore';
 
 export class SliderPanelView implements IDisposable {
 	private readonly store = new DisposableStore();
+	private panel: HTMLElement | null = null;
 
 	public constructor(
-		containerEl: HTMLElement,
-		parameterStore: IParameterStore,
+		private readonly containerEl: HTMLElement,
+		private readonly parameterStore: IParameterStore,
 	) {
-		const declarations = parameterStore.declarations();
+		this.render();
+	}
+
+	public render(): void {
+		this.store.dispose();
+		if (this.panel) {
+			this.panel.remove();
+			this.panel = null;
+		}
+
+		const declarations = this.parameterStore.declarations();
 		if (declarations.length === 0) {
 			return;
 		}
 
-		const panel = containerEl.createDiv({ cls: 'mathz-sliders' });
+		const panel = this.containerEl.createDiv({ cls: 'mathz-sliders' });
+		this.panel = panel;
 
 		for (const decl of declarations) {
 			const row = panel.createDiv({ cls: 'mathz-slider' });
@@ -48,20 +60,20 @@ export class SliderPanelView implements IDisposable {
 			rangeInput.addEventListener('input', () => {
 				const val = parseFloat(rangeInput.value);
 				if (!Number.isNaN(val)) {
-					parameterStore.set(decl.name, val);
-					numberInput.value = String(parameterStore.get(decl.name) ?? val);
+					this.parameterStore.set(decl.name, val);
+					numberInput.value = String(this.parameterStore.get(decl.name) ?? val);
 				}
 			});
 
 			const commitNumber = (): void => {
 				const val = parseFloat(numberInput.value);
 				if (!Number.isNaN(val)) {
-					parameterStore.set(decl.name, val);
-					const current = parameterStore.get(decl.name) ?? val;
+					this.parameterStore.set(decl.name, val);
+					const current = this.parameterStore.get(decl.name) ?? val;
 					numberInput.value = String(current);
 					rangeInput.value = String(current);
 				} else {
-					const current = parameterStore.get(decl.name) ?? decl.value;
+					const current = this.parameterStore.get(decl.name) ?? decl.value;
 					numberInput.value = String(current);
 					rangeInput.value = String(current);
 				}
@@ -72,7 +84,7 @@ export class SliderPanelView implements IDisposable {
 
 			// Synchronize if parameterStore is modified externally
 			this.store.add(
-				parameterStore.onChanged.on((values) => {
+				this.parameterStore.onChanged.on((values: Record<string, number>) => {
 					if (values[decl.name] !== undefined) {
 						const current = String(values[decl.name]);
 						if (rangeInput.value !== current) rangeInput.value = current;
@@ -85,5 +97,9 @@ export class SliderPanelView implements IDisposable {
 
 	public dispose(): void {
 		this.store.dispose();
+		if (this.panel) {
+			this.panel.remove();
+			this.panel = null;
+		}
 	}
 }

@@ -25,6 +25,25 @@
 	flex-direction: column;
 	gap: 12px;
 }
+.mathz-editor {
+	width: 100%;
+	min-height: 120px;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small, 0.9em);
+	color: var(--text-normal);
+	background: var(--background-primary);
+	border: 2px solid var(--mathz-edge);
+	border-radius: var(--radius-m, 10px);
+	box-shadow: 0 3px 0 var(--mathz-edge);
+	padding: 8px 12px;
+	resize: vertical;
+	box-sizing: border-box;
+	line-height: 1.4;
+}
+.mathz-editor:focus {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+}
 .mathz .mathz-equations {
 	margin: 0;
 	padding: 0;

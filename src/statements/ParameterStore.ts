@@ -9,9 +9,30 @@ export class ParameterStore implements IParameterStore, IDisposable {
 	private readonly currentValues: Record<string, number> = {};
 
 	public constructor(declarations: readonly SliderDeclaration[] = []) {
+		this.setDeclarations(declarations, false);
+	}
+
+	public setDeclarations(declarations: readonly SliderDeclaration[], notify = true): void {
+		const oldValues = { ...this.currentValues };
+		// Clear current declarations and values
+		this.decls.length = 0;
+		for (const key of Object.keys(this.currentValues)) {
+			delete this.currentValues[key];
+		}
+
 		for (const decl of declarations) {
 			this.decls.push(decl);
-			this.currentValues[decl.name] = decl.value;
+			const key = decl.name.toLowerCase();
+			if (oldValues[key] !== undefined) {
+				// Keep current value clamped to new range
+				this.currentValues[key] = Math.min(decl.max, Math.max(decl.min, oldValues[key]));
+			} else {
+				this.currentValues[key] = decl.value;
+			}
+		}
+
+		if (notify) {
+			this.onChanged.fire(this.values());
 		}
 	}
 

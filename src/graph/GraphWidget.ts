@@ -26,7 +26,7 @@ export class GraphWidget implements IDisposable {
 		private readonly canvas: HTMLCanvasElement,
 		private readonly stage: HTMLElement,
 		private readonly rc: RenderContext,
-		private readonly view: ViewTransform,
+		public readonly view: ViewTransform,
 		private readonly grid: GridRenderer,
 		private readonly labels: LabelRenderer,
 		private readonly hover: HoverOverlay,

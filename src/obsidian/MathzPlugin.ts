@@ -8,7 +8,7 @@ export default class MathzPlugin extends Plugin {
 		const factory = root.createBlockFactory();
 
 		this.registerMarkdownCodeBlockProcessor('mathz', (src, el, ctx) => {
-			ctx.addChild(new MathzBlock(el, src, factory));
+			ctx.addChild(new MathzBlock(el, src, factory, ctx));
 		});
 	}
 }

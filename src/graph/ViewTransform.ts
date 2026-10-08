@@ -137,6 +137,12 @@ export class ViewTransform {
 		this.cy += dy / this.scale;
 	}
 
+	public setState(state: { cx: number; cy: number; scale: number }): void {
+		this.cx = state.cx;
+		this.cy = state.cy;
+		this.scale = Math.min(this.maxScale, Math.max(this.minScale, state.scale));
+	}
+
 	public reset(): void {
 		this.cx = 0;
 		this.cy = 0;
