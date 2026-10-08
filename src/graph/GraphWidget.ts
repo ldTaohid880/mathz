@@ -135,10 +135,16 @@ export class GraphWidget implements IDisposable {
 			this.labels.draw();
 
 			const palette = this.themeProvider.getTheme().palette;
-			for (let i = 0; i < this.statements.length; i++) {
-				const statement = this.statements[i];
-				const color = palette.length > 0 ? palette[i % palette.length] : '#1f77b4';
-				this.registry.render(statement, this.view, this.rc, { color, width: 2 });
+			const entries = this.statements.map((statement, index) => {
+				const color = palette.length > 0 ? palette[index % palette.length] : '#1f77b4';
+				const layer = this.registry.getLayer(statement);
+				return { statement, color, layer, index };
+			});
+
+			entries.sort((a, b) => (a.layer !== b.layer ? a.layer - b.layer : a.index - b.index));
+
+			for (const entry of entries) {
+				this.registry.render(entry.statement, this.view, this.rc, { color: entry.color, width: 2 });
 			}
 
 			ctx.setTransform(1, 0, 0, 1, 0, 0);

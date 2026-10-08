@@ -11,7 +11,7 @@ export class PolarRenderer implements ICurveRenderer<PolarStatement> {
 		rc: RenderContext,
 		style: CurveStyle,
 	): void {
-		const { fn } = statement;
+		const { fn, domain } = statement;
 		const [a, b] = [0, Math.PI * 4];
 		const steps = Math.max(2, Math.round((b - a) / 0.01));
 		const pts: Array<ScreenPoint | null> = [];
@@ -19,11 +19,18 @@ export class PolarRenderer implements ICurveRenderer<PolarStatement> {
 		for (let i = 0; i <= steps; i++) {
 			const theta = a + ((b - a) * i) / steps;
 			const r = fn.evaluate({ ...rc.params, theta });
-			pts.push(
-				Number.isFinite(r) && Math.abs(r) < 1e6
-					? view.toScreen({ x: r * Math.cos(theta), y: r * Math.sin(theta) })
-					: null,
-			);
+
+			let valid = Number.isFinite(r) && Math.abs(r) < 1e6;
+			if (valid) {
+				const x = r * Math.cos(theta);
+				const y = r * Math.sin(theta);
+				if (domain && !domain.test({ ...rc.params, theta, r, x, y })) {
+					valid = false;
+				}
+				pts.push(valid ? view.toScreen({ x, y }) : null);
+			} else {
+				pts.push(null);
+			}
 		}
 		rc.strokeCurve(pts, style.color, style.width);
 	}
