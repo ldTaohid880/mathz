@@ -18,7 +18,7 @@ export class PolarRenderer implements ICurveRenderer<PolarStatement> {
 
 		for (let i = 0; i <= steps; i++) {
 			const theta = a + ((b - a) * i) / steps;
-			const r = fn.evaluate({ theta });
+			const r = fn.evaluate({ ...rc.params, theta });
 			pts.push(
 				Number.isFinite(r) && Math.abs(r) < 1e6
 					? view.toScreen({ x: r * Math.cos(theta), y: r * Math.sin(theta) })

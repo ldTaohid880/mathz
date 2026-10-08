@@ -62,12 +62,14 @@ describe('GraphWidget', () => {
 		};
 
 		const mockCtx = {
+			setTransform: vi.fn(),
 			getImageData: vi.fn().mockReturnValue({}),
 			putImageData: vi.fn(),
 		};
 		const canvas = {
 			width: 600,
 			height: 600,
+			style: {},
 			getContext: vi.fn().mockReturnValue(mockCtx),
 		} as unknown as HTMLCanvasElement;
 
@@ -76,6 +78,8 @@ describe('GraphWidget', () => {
 			clear: vi.fn(),
 		} as any;
 		const view = {
+			size: 601,
+			setSize: vi.fn(),
 			zoomAt: vi.fn(),
 			reset: vi.fn(),
 		} as any;
@@ -89,8 +93,13 @@ describe('GraphWidget', () => {
 		} as any;
 		const registry = { render: vi.fn() } as any;
 
+		const stage = {
+			clientWidth: 601,
+		} as unknown as HTMLElement;
+
 		const widget = new GraphWidget(
 			canvas,
+			stage,
 			rc,
 			view,
 			grid,

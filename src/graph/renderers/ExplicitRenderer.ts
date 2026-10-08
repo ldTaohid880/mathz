@@ -22,7 +22,7 @@ export class ExplicitRenderer implements ICurveRenderer<ExplicitStatement> {
 
 		for (let s = 0; s <= view.size; s++) {
 			const t = axis === 'x' ? view.toWorld(s, 0).x : view.toWorld(0, s).y;
-			const v = fn.evaluate(axis === 'x' ? { x: t } : { y: t });
+			const v = fn.evaluate(axis === 'x' ? { ...rc.params, x: t } : { ...rc.params, y: t });
 			const q = Number.isFinite(v)
 				? view.toScreen(axis === 'x' ? { x: t, y: v } : { x: v, y: t })
 				: null;

@@ -8,7 +8,7 @@ export interface IStatementClassifier {
 	 * "r = 3sin(2theta)", "x = 5cos(t), y = 3sin(t)") into a {@link Statement}.
 	 * Throws an Error with a user-facing message on invalid input.
 	 */
-	classify(equation: string): Statement;
+	classify(equation: string, extraVariables?: readonly string[]): Statement;
 }
 
 /**
@@ -19,9 +19,9 @@ export interface IStatementClassifier {
 export class StatementClassifier implements IStatementClassifier {
 	public constructor(private readonly compiler: IExpressionCompiler) {}
 
-	public classify(equation: string): Statement {
+	public classify(equation: string, extraVariables: readonly string[] = []): Statement {
 		if (equation.includes(',')) {
-			return this.classifyParametric(equation);
+			return this.classifyParametric(equation, extraVariables);
 		}
 
 		const sides = equation.split('=');
@@ -31,24 +31,24 @@ export class StatementClassifier implements IStatementClassifier {
 		const lhs = sides[0].trim().toLowerCase();
 
 		if (lhs === 'r') {
-			const fn = this.compiler.compile(sides[1], ['theta']);
+			const fn = this.compiler.compile(sides[1], ['theta', ...extraVariables]);
 			return { kind: 'polar', fn };
 		}
 
 		if (lhs === 'x' || lhs === 'y') {
-			const rhs = this.compiler.compile(sides[1], ['x', 'y']);
+			const rhs = this.compiler.compile(sides[1], ['x', 'y', ...extraVariables]);
 			if (!rhs.usedVariables.has(lhs)) {
 				const axis = lhs === 'y' ? 'x' : 'y';
 				return { kind: 'explicit', axis, fn: rhs };
 			}
 		}
 
-		const left = this.compiler.compile(sides[0], ['x', 'y']);
-		const right = this.compiler.compile(sides[1], ['x', 'y']);
+		const left = this.compiler.compile(sides[0], ['x', 'y', ...extraVariables]);
+		const right = this.compiler.compile(sides[1], ['x', 'y', ...extraVariables]);
 		return { kind: 'implicit', left, right };
 	}
 
-	private classifyParametric(equation: string): Statement {
+	private classifyParametric(equation: string, extraVariables: readonly string[] = []): Statement {
 		const parts = equation.split(',').map((p) => p.split('='));
 		if (parts.length !== 2 || parts.some((p) => p.length !== 2)) {
 			throw new Error('Parametric form: "x = ..., y = ..." using t');
@@ -61,7 +61,7 @@ export class StatementClassifier implements IStatementClassifier {
 					'Parametric form needs both "x = ..." and "y = ..."',
 				);
 			}
-			return this.compiler.compile(p[1], ['t']);
+			return this.compiler.compile(p[1], ['t', ...extraVariables]);
 		};
 
 		const fx = side('x');

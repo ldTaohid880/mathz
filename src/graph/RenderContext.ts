@@ -48,6 +48,7 @@ export type ScreenSegment = readonly [ScreenPoint, ScreenPoint];
 export class RenderContext {
 	public readonly fontFamily: string;
 	public readonly fontSize: number;
+	public params: Readonly<Record<string, number>> = {};
 
 	public constructor(
 		private readonly ctx: CanvasRenderingContext2D,

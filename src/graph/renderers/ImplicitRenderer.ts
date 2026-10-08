@@ -35,7 +35,8 @@ export class ImplicitRenderer implements ICurveRenderer<ImplicitStatement> {
 		style: CurveStyle,
 	): void {
 		const { left, right } = statement;
-		const f = (x: number, y: number): number => left.evaluate({ x, y }) - right.evaluate({ x, y });
+		const f = (x: number, y: number): number =>
+			left.evaluate({ ...rc.params, x, y }) - right.evaluate({ ...rc.params, x, y });
 
 		const extent = view.extent;
 		const n = Math.ceil(extent / RESOLUTION);

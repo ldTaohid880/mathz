@@ -11,15 +11,20 @@ import type { RenderContext } from './RenderContext';
 import type { RendererRegistry } from './RendererRegistry';
 import type { ViewTransform } from './ViewTransform';
 
+import type { IParameterStore } from '../statements/IParameterStore';
+
 export class GraphWidget implements IDisposable {
 	private readonly store = new DisposableStore();
 	private statements: Statement[] = [];
 	private snapshot: ImageData | null = null;
 	private pendingFrame: number | null = null;
 	private pendingSceneChange = false;
+	private resizeObserver: ResizeObserver | null = null;
+	private currentDpr = 1;
 
 	public constructor(
 		private readonly canvas: HTMLCanvasElement,
+		private readonly stage: HTMLElement,
 		private readonly rc: RenderContext,
 		private readonly view: ViewTransform,
 		private readonly grid: GridRenderer,
@@ -29,8 +34,8 @@ export class GraphWidget implements IDisposable {
 		private readonly registry: RendererRegistry,
 		private readonly themeProvider: IThemeProvider,
 		private readonly scheduler: IScheduler,
+		private readonly parameterStore?: IParameterStore,
 	) {
-		console.log("theme", JSON.stringify(this.themeProvider.getTheme()));
 		this.store.add(this.interaction);
 		this.store.add(
 			this.themeProvider.onThemeChange.on((theme) => {
@@ -39,7 +44,45 @@ export class GraphWidget implements IDisposable {
 			}),
 		);
 		this.rc.theme = this.themeProvider.getTheme();
+
+		if (this.parameterStore) {
+			this.rc.params = this.parameterStore.values();
+			this.store.add(
+				this.parameterStore.onChanged.on((values) => {
+					this.rc.params = values;
+					this.scheduleRepaint(true);
+				}),
+			);
+		}
+
+		this.setupResizeObserver();
+		const initialWidth = this.stage.clientWidth || this.view.size;
+		const initialCss = Math.min(600, Math.max(200, Math.floor(initialWidth)));
+		this.updateCanvasDimensions(initialCss);
 		this.scheduleRepaint(true);
+	}
+
+	private setupResizeObserver(): void {
+		if (typeof ResizeObserver === 'undefined') {
+			return;
+		}
+		this.resizeObserver = new ResizeObserver(() => {
+			const css = Math.min(600, Math.max(200, Math.floor(this.stage.clientWidth)));
+			this.currentDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+			if (css !== this.view.size || this.canvas.width !== Math.round(css * this.currentDpr)) {
+				this.updateCanvasDimensions(css);
+				this.scheduleRepaint(true);
+			}
+		});
+		this.resizeObserver.observe(this.stage);
+	}
+
+	private updateCanvasDimensions(cssSize: number): void {
+		this.currentDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+		this.view.setSize(cssSize);
+		this.canvas.width = Math.round(cssSize * this.currentDpr);
+		this.canvas.height = Math.round(cssSize * this.currentDpr);
+		this.snapshot = null;
 	}
 
 	public setStatements(statements: Statement[]): void {
@@ -81,7 +124,12 @@ export class GraphWidget implements IDisposable {
 		const ctx = this.canvas.getContext('2d');
 		if (!ctx) return;
 
+		const dpr = this.currentDpr || (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
+		const backingWidth = this.canvas.width;
+		const backingHeight = this.canvas.height;
+
 		if (sceneChanged || !this.snapshot) {
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 			this.rc.clear();
 			this.grid.draw();
 			this.labels.draw();
@@ -93,9 +141,13 @@ export class GraphWidget implements IDisposable {
 				this.registry.render(statement, this.view, this.rc, { color, width: 2 });
 			}
 
-			this.snapshot = ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			this.snapshot = ctx.getImageData(0, 0, backingWidth, backingHeight);
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 		} else {
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
 			ctx.putImageData(this.snapshot, 0, 0);
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 		}
 
 		const pointer = this.interaction.pointer;
@@ -108,6 +160,10 @@ export class GraphWidget implements IDisposable {
 		if (this.pendingFrame !== null) {
 			this.scheduler.cancelFrame(this.pendingFrame);
 			this.pendingFrame = null;
+		}
+		if (this.resizeObserver) {
+			this.resizeObserver.disconnect();
+			this.resizeObserver = null;
 		}
 		this.store.dispose();
 		this.snapshot = null;

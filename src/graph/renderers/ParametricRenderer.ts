@@ -22,8 +22,8 @@ export class ParametricRenderer implements ICurveRenderer<ParametricStatement> {
 
 		for (let i = 0; i <= steps; i++) {
 			const t = a + ((b - a) * i) / steps;
-			const x = fx.evaluate({ t });
-			const y = fy.evaluate({ t });
+			const x = fx.evaluate({ ...rc.params, t });
+			const y = fy.evaluate({ ...rc.params, t });
 			pts.push(ok(x) && ok(y) ? view.toScreen({ x, y }) : null);
 		}
 		rc.strokeCurve(pts, style.color, style.width);

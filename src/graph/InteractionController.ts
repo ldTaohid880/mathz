@@ -46,20 +46,24 @@ export class InteractionController implements IDisposable {
 
 	private eventPoint(e: { clientX: number; clientY: number }): ScreenPoint {
 		const r = this.canvas.getBoundingClientRect();
+		const scaleX = r.width > 0 ? this.view.size / r.width : 1;
+		const scaleY = r.height > 0 ? this.view.size / r.height : 1;
 		return {
-			x: ((e.clientX - r.left) * this.canvas.width) / r.width,
-			y: ((e.clientY - r.top) * this.canvas.height) / r.height,
+			x: (e.clientX - r.left) * scaleX,
+			y: (e.clientY - r.top) * scaleY,
 		};
 	}
 
 	private bind(): void {
 		const { canvas, store } = this;
 
-		canvas.style.touchAction = 'none';
 		canvas.style.cursor = 'crosshair';
 
 		store.add(
 			addDomListener(canvas, 'pointerdown', (e) => {
+				if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') {
+					return;
+				}
 				canvas.setPointerCapture(e.pointerId);
 				this.dragStart = this.eventPoint(e);
 				canvas.style.cursor = 'grabbing';
@@ -68,6 +72,9 @@ export class InteractionController implements IDisposable {
 
 		store.add(
 			addDomListener(canvas, 'pointermove', (e) => {
+				if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') {
+					return;
+				}
 				const p = this.eventPoint(e);
 				this.pointerPos = p;
 				if (this.dragStart) {
@@ -80,7 +87,10 @@ export class InteractionController implements IDisposable {
 			}),
 		);
 
-		const endDrag = (): void => {
+		const endDrag = (e?: PointerEvent): void => {
+			if (e && e.pointerType !== 'mouse' && e.pointerType !== 'pen') {
+				return;
+			}
 			this.dragStart = null;
 			canvas.style.cursor = 'crosshair';
 		};
@@ -99,6 +109,9 @@ export class InteractionController implements IDisposable {
 				canvas,
 				'wheel',
 				(e) => {
+					if (!e.ctrlKey && !e.metaKey) {
+						return;
+					}
 					e.preventDefault();
 					const p = this.eventPoint(e);
 					const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;

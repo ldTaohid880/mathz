@@ -64,7 +64,9 @@ describe("ExpressionCompiler", () => {
 	});
 
 	it("throws on an unknown identifier", () => {
-		expect(() => makeCompiler().compile("z", [])).toThrow('Unexpected "z"');
+		expect(() => makeCompiler().compile("z", [])).toThrow(
+			'Unknown name "z". Declare it with @slider z = 1 [min, max]',
+		);
 	});
 
 	it("handles unary minus and negative exponent bases", () => {

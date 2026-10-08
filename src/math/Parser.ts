@@ -103,6 +103,7 @@ export class Parser implements IParser {
 				if (variableNames.includes(tok.value)) {
 					return { kind: "variable", name: tok.value };
 				}
+				throw new Error(`Unknown name "${tok.value}". Declare it with @slider ${tok.value} = 1 [min, max]`);
 			}
 
 			throw new Error(`Unexpected "${tok.value}"`);

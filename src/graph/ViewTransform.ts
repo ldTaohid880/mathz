@@ -36,9 +36,9 @@ export class ViewTransform {
 	public readonly maxScale: number;
 
 	/** Canvas side length in CSS pixels (extent + 1, for crisp 1px gridlines). */
-	public readonly size: number;
-	private readonly extent_: number;
-	private readonly half: number;
+	public size: number;
+	private extent_: number;
+	private half: number;
 
 	private cx = 0;
 	private cy = 0;
@@ -54,6 +54,12 @@ export class ViewTransform {
 		this.size = this.extent_ + 1;
 		this.half = this.extent_ / 2;
 		this.scale = this.cellSize;
+	}
+
+	public setSize(newSize: number): void {
+		this.size = newSize;
+		this.extent_ = newSize - 1;
+		this.half = this.extent_ / 2;
 	}
 
 	public get centerX(): number {
