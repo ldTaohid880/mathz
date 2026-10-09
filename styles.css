@@ -68,6 +68,10 @@
 	border: 2px solid var(--mathz-edge);
 	border-radius: var(--radius-m, 10px);
 }
+.mathz-canvas:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
 .mathz-hint {
 	margin-top: 8px;
 	text-align: center;

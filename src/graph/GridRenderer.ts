@@ -13,8 +13,9 @@ export class GridRenderer {
 		private readonly rc: RenderContext,
 	) {}
 
-	public draw(): void {
-		const { view, rc } = this;
+	public draw(targetRc: RenderContext = this.rc): void {
+		const { view } = this;
+		const rc = targetRc;
 		const { size } = view;
 		const step = view.niceStep();
 		const { xmin, xmax, ymin, ymax } = view.bounds();

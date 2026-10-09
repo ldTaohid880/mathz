@@ -1,7 +1,7 @@
 {
 	"name": "mathz",
 	"version": "1.0.0",
-	"description": "Plot equations from ```mathz code blocks.",
+	"description": "Plot equations, curves and inequalities with interactive sliders from mathz code blocks.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -10,7 +10,8 @@
 		"typecheck": "tsc -noEmit -skipLibCheck",
 		"lint": "eslint src tests",
 		"test": "vitest run",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"version": "node version-bump.mjs"
 	},
 	"license": "MIT",
 	"devDependencies": {

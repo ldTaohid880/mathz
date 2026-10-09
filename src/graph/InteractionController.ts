@@ -128,5 +128,53 @@ export class InteractionController implements IDisposable {
 				this.schedule(true);
 			}),
 		);
+
+		store.add(
+			addDomListener(canvas, 'keydown', (e) => {
+				const span = this.view.size;
+				const multiplier = e.shiftKey ? 3 : 1;
+				const step = span * 0.1 * multiplier;
+
+				switch (e.key) {
+					case 'ArrowLeft':
+						e.preventDefault();
+						this.view.panBy(step, 0);
+						this.schedule(true);
+						break;
+					case 'ArrowRight':
+						e.preventDefault();
+						this.view.panBy(-step, 0);
+						this.schedule(true);
+						break;
+					case 'ArrowUp':
+						e.preventDefault();
+						this.view.panBy(0, -step);
+						this.schedule(true);
+						break;
+					case 'ArrowDown':
+						e.preventDefault();
+						this.view.panBy(0, step);
+						this.schedule(true);
+						break;
+					case '+':
+					case '=':
+						e.preventDefault();
+						this.view.zoomAt(1.5);
+						this.schedule(true);
+						break;
+					case '-':
+						e.preventDefault();
+						this.view.zoomAt(1 / 1.5);
+						this.schedule(true);
+						break;
+					case '0':
+					case 'Home':
+						e.preventDefault();
+						this.view.reset();
+						this.schedule(true);
+						break;
+				}
+			}),
+		);
 	}
 }
