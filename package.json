@@ -14,6 +14,9 @@
 		"version": "node version-bump.mjs"
 	},
 	"license": "MIT",
+	"repository": {
+		
+	},
 	"devDependencies": {
 		"@types/node": "^20.11.0",
 		"@typescript-eslint/eslint-plugin": "^7.1.0",

@@ -4,7 +4,7 @@
 	"version": "1.0.0",
 	"minAppVersion": "1.1.0",
 	"description": "Plot equations, curves and inequalities with interactive sliders from mathz code blocks.",
-	"author": "<YOUR NAME>",
-	"authorUrl": "<YOUR URL>",
+	"author": "Md Mahadi Hassan",
+	"authorUrl": "mhassan18.me",
 	"isDesktopOnly": false
 }
