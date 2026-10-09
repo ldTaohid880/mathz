@@ -1,5 +1,6 @@
 import type { App } from 'obsidian';
 import { BrowserScheduler } from './core/BrowserScheduler';
+import { BrowserVisibilityObserver } from './core/BrowserVisibilityObserver';
 import { ConsoleLogger } from './core/ConsoleLogger';
 import { ExplicitRenderer } from './graph/renderers/ExplicitRenderer';
 import { ImplicitRenderer } from './graph/renderers/ImplicitRenderer';
@@ -15,6 +16,7 @@ import { ExpressionCompiler } from './math/ExpressionCompiler';
 import { FunctionLibrary } from './math/FunctionLibrary';
 import { Parser } from './math/Parser';
 import { Tokenizer } from './math/Tokenizer';
+import { ObsidianImageExporter } from './obsidian/ObsidianImageExporter';
 import { ObsidianNoteWriter } from './obsidian/ObsidianNoteWriter';
 import { ObsidianNotifier } from './obsidian/ObsidianNotifier';
 import { ObsidianThemeProvider } from './obsidian/ObsidianThemeProvider';
@@ -31,9 +33,11 @@ export class CompositionRoot {
 	public createBlockFactory(): MathzBlockFactory {
 		const logger = new ConsoleLogger();
 		const scheduler = new BrowserScheduler();
+		const visibilityObserver = new BrowserVisibilityObserver();
 		const notifier = new ObsidianNotifier();
 		const noteWriter = new ObsidianNoteWriter(this.app);
 		const themeProvider = new ObsidianThemeProvider(this.app);
+		const imageExporter = new ObsidianImageExporter(this.app);
 
 		const functionLibrary = new FunctionLibrary();
 		const tokenizer = new Tokenizer();
@@ -73,6 +77,8 @@ export class CompositionRoot {
 			noteWriter,
 			notifier,
 			this.blockStateCache,
+			imageExporter,
+			visibilityObserver,
 		);
 	}
 }

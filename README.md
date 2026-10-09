@@ -1,299 +1,172 @@
 # Mathz
 
-Mathz is an Obsidian plugin for plotting mathematical equations, parametric curves, discrete points, and interactive sliders directly inside your notes. Add equations to a ````mathz```` code block, and Mathz renders them on an interactive coordinate grid styled to match your Obsidian theme.
+Mathz is an interactive math plotting plugin for Obsidian. It renders equations, curves, implicit functions, polar plots, parametric graphs, inequalities, and points directly inside your notes from ````mathz```` code blocks with real-time sliders and full live-editing capabilities.
+
+<!-- TODO: add GIF -->
 
 ## Features
 
-- **Multiple equation types**: Plot explicit (`y = f(x)`, `x = f(y)`), implicit, polar, and parametric curves.
-- **Points & labels**: Plot individual or grouped coordinates `(x, y)` with optional text labels.
-- **User-defined functions**: Define reusable single- or multi-parameter functions (`f(x) = ...`) and call them across curves or other definitions.
-- **Interactive sliders**: Declare dynamic parameters with `@slider` to adjust variables in real-time.
-- **Live edit mode**: Open an in-block editor (✎) to update equations with live preview and save changes back to your note (💾).
-- **Interactive canvas**: Pan by dragging, zoom around the cursor with `Ctrl`/`Cmd` + scroll, and inspect coordinates on hover.
-- **Theme integration**: Adapts graph backgrounds, axes, grid lines, and curve palette to light and dark Obsidian themes.
+- **Rich Math Syntax**: Plot explicit equations, implicit functions, polar curves, parametric equations, inequalities, and labeled points.
+- **Interactive Sliders**: Declare parameter variables that generate interactive UI sliders to explore function transformations in real time.
+- **In-Note Live Editor**: Edit equation source directly within the rendered block and save changes back to your markdown note.
+- **Image Export**: Export high-resolution PNG graphs directly to your clipboard or your Obsidian vault attachments folder.
+- **Optimized & Accessible**: Keyboard canvas control, screen-reader support, and automatic repaint pausing when off-screen.
+
+<!-- TODO: add GIF -->
 
 ## Installation
 
-### Community Plugins (Obsidian)
-
-1. Open **Settings** in Obsidian.
-2. Navigate to **Community plugins** and turn off **Restricted mode** if prompted.
-3. Select **Browse** and search for **Mathz**.
-4. Select **Install**, then select **Enable**.
+### Community Plugins (Once Approved)
+1. Open **Settings** > **Community plugins** in Obsidian.
+2. Turn off **Restricted mode**.
+3. Click **Browse** and search for **Mathz**.
+4. Click **Install**, then enable the plugin.
 
 ### Manual Installation
+1. Download `main.js`, `manifest.json`, and `styles.css` from the latest release on GitHub.
+2. Create a folder named `mathz` inside `.obsidian/plugins/` in your vault.
+3. Move the downloaded files into `.obsidian/plugins/mathz/`.
+4. Reload Obsidian and enable **Mathz** in **Community plugins**.
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the latest release.
-2. Create a directory named `mathz` in your vault at `.obsidian/plugins/mathz`.
-3. Copy `main.js`, `manifest.json`, and `styles.css` into that directory.
-4. Reload Obsidian or restart the app, then enable **Mathz** under **Settings → Community plugins**.
+### BRAT (Beta Tester Release)
+1. Install the **Obsidian 42 - BRAT** plugin.
+2. Add `https://github.com/<YOUR NAME>/mathz` as a beta plugin.
 
-## Usage / Quick Start
+---
 
-Create a fenced code block with the language identifier `mathz`. Write one equation or declaration per line:
+## Quick Start
 
-````markdown
-```mathz
-# Plotting a parabola and a line
-y = x^2 - 4
+Add a ````mathz```` code block to any note:
+
+````mathz
+@title Circle and Line
+@slider r = 3 [1, 10, 0.5]
+x^2 + y^2 = r^2
 y = 0.5x + 1
-```
+(0, 1) "Intercept"
 ````
 
-Each equation appears in the side list with a colored indicator matching its curve on the canvas. Click any equation chip to toggle its visibility.
+---
 
-## Supported Equation Types
+## Full Syntax Reference
 
-### Explicit Equations
+### Statements (One per line)
 
-Define $y$ as a function of $x$, or $x$ as a function of $y$:
-
-````markdown
-```mathz
-y = sin(x)
-x = y^2 - 2
-```
-````
-
-> **Note**: An equation is treated as explicit when the dependent variable appears alone on the left side and does not appear on the right side.
-
-### Implicit Equations
-
-Write equations relating $x$ and $y$ on both sides:
-
-````markdown
-```mathz
-x^2 + y^2 = 25
-sin(x) = cos(y)
-```
-````
-
-Implicit equations are evaluated across the visible grid using a marching squares contour generator.
-
-### Polar Equations
-
-Define the radius $r$ in terms of `theta` or `θ`:
-
-````markdown
-```mathz
-r = 3sin(2theta)
-r = 1 + cos(θ)
-```
-````
-
-### Parametric Equations
-
-Define both coordinates on a single line separated by a comma using the parameter `t`:
-
-````markdown
-```mathz
-x = 3cos(t), y = 2sin(t)
-x = t * cos(t), y = t * sin(t)
-```
-````
-
-### Discrete Points
-
-Plot coordinate pairs enclosed in parentheses. Multiple points can be separated by commas, and an optional double-quoted label can be added at the end:
-
-````markdown
-```mathz
-(0, 0)
-(1, 2), (-1, 2), (0, -2)
-(3, 4) "Peak"
-```
-````
-
-> **Note**: Point coordinates can use numbers, constants, declared sliders, and user-defined functions, but cannot contain free curve variables (`x`, `y`, `t`, `r`, or `theta`).
-
-## Expressions
-
-### Operators
-
-| Operator | Description | Precedence / Associativity | Example |
-| :--- | :--- | :--- | :--- |
-| `+` | Addition | Left-to-right | `x + 2` |
-| `-` | Subtraction / Negation | Unary prefix or left-to-right binary | `-x`, `5 - 3` |
-| `*` | Multiplication | Left-to-right | `3 * x` |
-| `/` | Division | Left-to-right | `x / 2` |
-| `^` | Exponentiation | Right-to-left | `x^2`, `2^3^2` |
-| `( )` | Grouping parentheses | Highest | `(x + 1) * (x - 1)` |
-
-### Constants
-
-| Constant | Value | Description |
+| Statement Type | Syntax Example | Notes |
 | :--- | :--- | :--- |
-| `pi` | `3.141592653589793` | Archimedes' constant $\pi$ |
-| `e` | `2.718281828459045` | Euler's number $e$ |
+| **Explicit Curves** | `y = f(x)` or `x = f(y)` | e.g. `y = 2x + 1`, `x = y^2 - 4` |
+| **Implicit Curves** | `x^2 + y^2 = 25`, `x*y = 6` | Rendered via Marching Squares |
+| **Polar Curves** | `r = 3sin(2θ)` or `r = 3sin(2theta)` | Drawn over `0 <= θ <= 4π` |
+| **Parametric** | `x = 5cos(t), y = 3sin(t)` | Drawn over `0 <= t <= 2π` |
+| **Points** | `(2, 3)`, `(1,1), (2,4)`, `(a, a^2) "P"` | Optional label in quotes; x/y not allowed in coords |
+| **Function Defs** | `f(x) = x^2 - 1`, `g(x, a) = a*f(x)` | Shown as muted ƒ chips; circular definitions rejected |
+| **Inequalities** | `y > x^2`, `x^2 + y^2 <= 9` | Shaded region; solid for `<=` `>=`, dashed for `<` `>` |
+| **Domain Limits** | Trailing `{0 <= x <= 3}` | Separate conditions with `,` or `and`; chains supported |
 
-### Built-in Functions
+### Directives
 
-All function arguments must be enclosed in parentheses (e.g. `sin(x)`):
+| Directive | Syntax Example | Description |
+| :--- | :--- | :--- |
+| `@title` | `@title Harmonic Motion` | Sets graph title (used in export filenames & aria-label) |
+| `@size` | `@size 400` | Canvas width/height in CSS pixels (200..600) |
+| `@view` | `@view -10 10 -10 10` | World bounds `xmin xmax ymin ymax` |
+| `@grid` | `@grid on` or `@grid off` | Show or hide grid lines |
+| `@slider` | `@slider a = 2 [-5, 5, 0.1]` | Declare slider variable `name = val [min, max, step]` |
 
-| Function | Description |
-| :--- | :--- |
-| `sin(x)`, `cos(x)`, `tan(x)` | Trigonometric functions (radians) |
-| `asin(x)`, `acos(x)`, `atan(x)` | Inverse trigonometric functions |
-| `sqrt(x)` | Square root ($\sqrt{x}$) |
-| `abs(x)` | Absolute value ($\|x\|$) |
-| `exp(x)` | Natural exponential ($e^x$) |
-| `ln(x)` | Natural logarithm ($\ln x$) |
-| `log(x)` | Base-10 logarithm ($\log_{10} x$) |
-| `floor(x)` | Largest integer $\le x$ |
-| `ceil(x)` | Smallest integer $\ge x$ |
-| `round(x)` | Nearest integer |
-| `sign(x)` | Sign of $x$ (`-1`, `0`, or `1`) |
+### Comments & Operators
 
-### Implicit Multiplication
+- **Comments**: `//` to end of line (outside quoted labels) or legacy lines starting with `#`. Comments are preserved when saving back to the note.
+- **Operators**: `+`, `-`, `*`, `/`, `^` (exponentiation).
+- **Implicit Multiplication**: e.g., `2x`, `3sin(x)`, `x(x+1)`.
+- **Constants**: `pi`, `e`.
+- **Built-in Functions**: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `abs`, `exp`, `ln` (natural log), `log` (base 10), `floor`, `ceil`, `round`, `sign`.
 
-Multiplication is automatically inferred between adjacent terms without requiring `*`:
+---
 
-- Number and variable: `2x`, `0.5y`
-- Number and function: `3sin(x)`, `2sqrt(x)`
-- Number and grouped expression: `2(x + 1)`
-- Consecutive single-letter identifiers: `xy` is parsed as `x * y`
+## Controls
 
-Multi-letter words corresponding to declared sliders, built-in functions, or user-defined functions remain intact.
+- **Pan**: Click and drag on the canvas.
+- **Zoom**: `Ctrl`/`Cmd` + scroll wheel (or plain scroll depending on settings).
+- **Reset View**: Double-click canvas or click the reset button (`↺`).
+- **Zoom Buttons**: Use `+` and `−` buttons in the top-right toolbar.
+- **Hover Crosshair**: Move mouse over the canvas to display coordinates.
+- **Toggle Equations**: Click any equation chip in the side list to show/hide its curve.
+- **In-Place Editor**: Click `✎` to edit mathz code live; click `💾` or press `Ctrl/Cmd+S` to write edits back into the note.
+- **Export PNG**: Click `📋` to copy PNG image to clipboard or `🖼` to save as a PNG file in your vault.
 
-## User-Defined Functions
+---
 
-Define custom functions using the syntax `name(param1, param2, ...) = expression`. Once declared, user-defined functions can be used in other equations, points, or nested inside further function definitions.
+## Settings
 
-````markdown
-```mathz
-# Single-parameter function
-f(x) = x^2 - 2
-y = f(x)
+Mathz provides configurable global defaults in Obsidian Settings:
+- **Default Graph Size**: Default size in CSS pixels.
+- **Default View Range**: Default `[xmin, xmax, ymin, ymax]`.
+- **Mouse Wheel Zoom**: Choose whether zooming requires `Ctrl`/`Cmd` modifier key.
+- **Show Navigation Hint**: Toggle footer hint on graphs.
+- **Show Grid**: Toggle grid display by default.
 
-# Multi-parameter function
-dist(a, b) = sqrt(a^2 + b^2)
-r = dist(sin(theta), cos(theta))
+---
 
-# Function calling another function
-sq(x) = x * x
-g(x) = sq(x) + 1
-y = g(x)
+## Export
+
+Export high-resolution images of your rendered graphs:
+- **Copy as Image (`📋`)**: Writes a PNG to system clipboard via the Clipboard API.
+- **Save as PNG (`🖼`)**: Saves PNG attachment to your vault (named `mathz-<slug>-<YYYYMMDD-HHmmss>.png`). Uses Obsidian's attachment folder settings with automatic collision avoidance.
+
+---
+
+## Theming
+
+Mathz automatically adapts to your current Obsidian theme (Dark or Light) and uses CSS variables for borders, background colors, accent highlights, and equation palette colors.
+
+---
+
+## Accessibility
+
+- **Screen Reader Support**: Canvas element uses `role="img"`, `tabindex="0"`, and a dynamic `aria-label` summarizing visible equations and title.
+- **Keyboard Navigation**:
+  - **Arrow keys**: Pan graph view by 10% (Hold `Shift` for 30%).
+  - **`+` / `=`**: Zoom in (1.5x).
+  - **`-`**: Zoom out (1/1.5x).
+  - **`0` or `Home`**: Reset to home view.
+- **Focus Indicators**: Standard high-contrast focus rings (`:focus-visible`) for buttons, equation chips, and canvas.
+
+---
+
+## Privacy and Safety
+
+- **100% Offline & Local**: Mathz does not send network requests or collect telemetry.
+- **Safe Parsing**: Equations are parsed using a custom tokenizer and recursive-descent parser. Mathz never calls `eval()` or `new Function()`.
+
+---
+
+## Limitations
+
+- Polar and parametric curves evaluate over fixed standard ranges (`0..4π` for polar, `0..2π` for parametric); domains can restrict but not expand these ranges.
+- Chained inequalities (e.g., `0 < x^2 + y^2 < 5`) are not supported; write separate inequality statements.
+- Exact symbolic algebra, regression, and list variables are not supported.
+
+---
+
+## Development
+
+```bash
+# Clone the repository
+git clone https://github.com/<YOUR NAME>/mathz.git
+cd mathz
+
+# Run live development build
+npm run dev
+
+# Run type checks and build production bundle
+npm run build
+
+# Run Vitest unit tests
+npm test
 ```
-````
 
-### Rules and Behavior
-
-- **Definition Chips**: User-defined functions appear in the list with a `ƒ` badge. They define equations without drawing curves directly.
-- **Composition & Calls**: User functions can accept complex expressions and call other defined functions (e.g. `f(g(x))`).
-- **Cycle Detection**: Circular references (e.g. `f(x) = g(x)` and `g(x) = f(x)`) are detected and surfaced with an error indicator: `Circular definition: f → g → f`.
-- **Parameter Validation**: Parameter names must be valid identifiers, and duplicate parameter names (e.g. `f(x, x) = x^2`) are rejected.
-- **Reserved Names**: Function names cannot collide with built-in functions (`sin`, `cos`, etc.), constants (`pi`, `e`), coordinate variables (`x`, `y`, `t`, `r`, `theta`), or declared `@slider` names.
-
-## Interactive Sliders
-
-Declare interactive parameter sliders using `@slider`:
-
-````markdown
-```mathz
-@slider a = 2 [-5, 5, 0.1]
-@slider b = 1 [-10, 10]
-
-y = a * sin(b * x)
-```
-````
-
-- **Syntax**: `@slider <name> = <initial_value> [<min>, <max>]` or `@slider <name> = <initial_value> [<min>, <max>, <step>]`.
-- If omitted, `step` defaults to `0.1`.
-- Dragging a slider updates the graph in real-time.
-- Slider values can be referenced by name in explicit, implicit, polar, parametric, point, and function expressions.
-
-## Comments and Organization
-
-- Empty lines are ignored.
-- Lines starting with `#` are treated as comments and will not be evaluated or plotted:
-
-````markdown
-```mathz
-# --- Trigonometric waves ---
-y = sin(x)
-y = cos(x)
-
-# --- Baseline ---
-y = 0
-```
-````
-
-## Graph Controls
-
-### Mouse and Keyboard Interaction
-
-- **Pan**: Click and drag the grid with mouse or pen.
-- **Zoom**: Hold `Ctrl` (or `Cmd` on macOS) and scroll with the mouse wheel.
-- **Reset**: Double-click anywhere on the grid to reset the view to its initial bounds.
-- **Inspect**: Move the mouse across the canvas to inspect coordinates under the crosshair cursor.
-
-### Toolbar Buttons
-
-Positioned in the top right of each graph block:
-
-| Icon | Action | Description |
-| :---: | :--- | :--- |
-| `✎` | **Edit** | Toggles an embedded source text editor above the equations. |
-| `💾` | **Save** | Appears when edits are made; atomically writes updated source back to the note file. |
-| `+` | **Zoom In** | Scales the view inward toward the center. |
-| `−` | **Zoom Out** | Scales the view outward from the center. |
-| `↺` | **Reset View** | Resets the zoom level and centers the origin `(0, 0)`. |
-
-### Equation List
-
-- Each plotted equation displays a color swatch matching its curve.
-- Click an equation chip (or press `Enter` / `Space` when focused) to hide or show that curve.
-
-## Examples
-
-### Damped Oscillation with Sliders and Functions
-
-````markdown
-```mathz
-@slider k = 0.5 [0.1, 2, 0.05]
-@slider w = 2 [0.5, 5, 0.1]
-
-envelope(x) = exp(-k * abs(x))
-y = envelope(x) * cos(w * x)
-y = envelope(x)
-y = -envelope(x)
-```
-````
-
-### Polar Rose & Center Point
-
-````markdown
-```mathz
-@slider petals = 4 [1, 10, 1]
-
-r = 3 * sin(petals * theta)
-(0, 0) "Origin"
-```
-````
-
-### Ellipse & Intersection
-
-````markdown
-```mathz
-# Implicit ellipse
-(x / 4)^2 + (y / 2)^2 = 1
-
-# Line intersecting ellipse
-y = 0.5x
-
-# Marked intersection points
-(2.83, 1.41) "P1"
-(-2.83, -1.41) "P2"
-```
-````
-
-## Limitations & Syntax Notes
-
-- **Case sensitivity**: Equation identifiers and function names are case-insensitive (`SIN(x)`, `Sin(x)`, and `sin(x)` resolve identically).
-- **Single equation per line**: Except for parametric equations (`x = ..., y = ...`) and comma-separated point groups (`(1, 2), (3, 4)`), each line must contain a single statement.
-- **Single-variable functions**: Built-in functions (`sin`, `sqrt`, etc.) accept a single argument. User-defined functions can take multiple arguments (`f(a, b) = a + b`).
-- **No recursive functions**: Recursive functions or mutual cycles (`f` calling `g` calling `f`) are disallowed and marked with a circular reference error.
+---
 
 ## License
 
-Mathz is released under the terms of the [MIT License](./LICENSE).
+[MIT License](LICENSE) © 2026 <YOUR NAME>

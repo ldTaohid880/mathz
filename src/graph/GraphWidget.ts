@@ -7,11 +7,12 @@ import type { HoverOverlay } from './HoverOverlay';
 import type { InteractionController } from './InteractionController';
 import type { IThemeProvider } from './IThemeProvider';
 import type { LabelRenderer } from './LabelRenderer';
-import type { RenderContext } from './RenderContext';
+import { RenderContext } from './RenderContext';
 import type { RendererRegistry } from './RendererRegistry';
 import type { ViewTransform } from './ViewTransform';
 
 import type { IParameterStore } from '../statements/IParameterStore';
+import type { IVisibilityObserver } from '../core/IVisibilityObserver';
 
 export class GraphWidget implements IDisposable {
 	private readonly store = new DisposableStore();
@@ -21,6 +22,8 @@ export class GraphWidget implements IDisposable {
 	private pendingSceneChange = false;
 	private resizeObserver: ResizeObserver | null = null;
 	private currentDpr = 1;
+	private isVisible = true;
+	private isDirtyWhileHidden = false;
 
 	public constructor(
 		private readonly canvas: HTMLCanvasElement,
@@ -35,6 +38,7 @@ export class GraphWidget implements IDisposable {
 		private readonly themeProvider: IThemeProvider,
 		private readonly scheduler: IScheduler,
 		private readonly parameterStore?: IParameterStore,
+		private readonly visibilityObserver?: IVisibilityObserver,
 	) {
 		this.store.add(this.interaction);
 		this.store.add(
@@ -59,6 +63,20 @@ export class GraphWidget implements IDisposable {
 		const initialWidth = this.stage.clientWidth || this.view.size;
 		const initialCss = Math.min(600, Math.max(200, Math.floor(initialWidth)));
 		this.updateCanvasDimensions(initialCss);
+
+		if (this.visibilityObserver) {
+			this.store.add(
+				this.visibilityObserver.observe(this.stage, (visible) => {
+					const wasVisible = this.isVisible;
+					this.isVisible = visible;
+					if (!wasVisible && visible && this.isDirtyWhileHidden) {
+						this.isDirtyWhileHidden = false;
+						this.scheduleRepaint(this.pendingSceneChange);
+					}
+				}),
+			);
+		}
+
 		this.scheduleRepaint(true);
 	}
 
@@ -105,9 +123,57 @@ export class GraphWidget implements IDisposable {
 		this.scheduleRepaint(true);
 	}
 
+	public drawScene(targetRc: RenderContext = this.rc): void {
+		targetRc.clear();
+		this.grid.draw(targetRc);
+		this.labels.draw(targetRc);
+
+		const palette = this.themeProvider.getTheme().palette;
+		const entries = this.statements.map((statement, index) => {
+			const color = palette.length > 0 ? palette[index % palette.length] : '#1f77b4';
+			const layer = this.registry.getLayer(statement);
+			return { statement, color, layer, index };
+		});
+
+		entries.sort((a, b) => (a.layer !== b.layer ? a.layer - b.layer : a.index - b.index));
+
+		for (const entry of entries) {
+			this.registry.render(entry.statement, this.view, targetRc, { color: entry.color, width: 2 });
+		}
+	}
+
+	public async renderToBlob(scale = 2): Promise<Blob | null> {
+		if (typeof document === 'undefined') return null;
+		const cssSize = this.view.size;
+		const canvas = document.createElement('canvas');
+		canvas.width = Math.round(cssSize * scale);
+		canvas.height = Math.round(cssSize * scale);
+
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return null;
+
+		ctx.setTransform(scale, 0, 0, scale, 0, 0);
+
+		const offRc = new RenderContext(ctx, this.view, this.themeProvider.getTheme(), {
+			fontFamily: this.rc.fontFamily,
+			fontSize: this.rc.fontSize,
+		});
+		offRc.params = this.parameterStore ? this.parameterStore.values() : this.rc.params;
+
+		this.drawScene(offRc);
+
+		return new Promise<Blob | null>((resolve) => {
+			canvas.toBlob((blob) => resolve(blob), 'image/png');
+		});
+	}
+
 	public scheduleRepaint(sceneChanged: boolean): void {
 		if (sceneChanged) {
 			this.pendingSceneChange = true;
+		}
+		if (!this.isVisible) {
+			this.isDirtyWhileHidden = true;
+			return;
 		}
 		if (this.pendingFrame !== null) {
 			return;
@@ -130,22 +196,7 @@ export class GraphWidget implements IDisposable {
 
 		if (sceneChanged || !this.snapshot) {
 			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-			this.rc.clear();
-			this.grid.draw();
-			this.labels.draw();
-
-			const palette = this.themeProvider.getTheme().palette;
-			const entries = this.statements.map((statement, index) => {
-				const color = palette.length > 0 ? palette[index % palette.length] : '#1f77b4';
-				const layer = this.registry.getLayer(statement);
-				return { statement, color, layer, index };
-			});
-
-			entries.sort((a, b) => (a.layer !== b.layer ? a.layer - b.layer : a.index - b.index));
-
-			for (const entry of entries) {
-				this.registry.render(entry.statement, this.view, this.rc, { color: entry.color, width: 2 });
-			}
+			this.drawScene(this.rc);
 
 			ctx.setTransform(1, 0, 0, 1, 0, 0);
 			this.snapshot = ctx.getImageData(0, 0, backingWidth, backingHeight);

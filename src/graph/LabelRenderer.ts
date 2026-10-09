@@ -13,8 +13,9 @@ export class LabelRenderer {
 		private readonly rc: RenderContext,
 	) {}
 
-	public draw(): void {
-		const { view, rc } = this;
+	public draw(targetRc: RenderContext = this.rc): void {
+		const { view } = this;
+		const rc = targetRc;
 		const step = view.niceStep() * 5; // label every major line
 		const { xmin, xmax, ymin, ymax } = view.bounds();
 		const origin = view.toScreen({ x: 0, y: 0 });

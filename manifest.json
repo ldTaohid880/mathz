@@ -2,10 +2,9 @@
 	"id": "mathz",
 	"name": "Mathz",
 	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Plot equations from ```mathz code blocks.",
-	"author": "Md. Mahadi Hasan",
-	"authorUrl": "https://mhassan.me",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"minAppVersion": "1.1.0",
+	"description": "Plot equations, curves and inequalities with interactive sliders from mathz code blocks.",
+	"author": "<YOUR NAME>",
+	"authorUrl": "<YOUR URL>",
 	"isDesktopOnly": false
 }

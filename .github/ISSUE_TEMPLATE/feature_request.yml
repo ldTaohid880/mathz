@@ -1,0 +1,29 @@
+name: Feature Request
+description: Suggest an idea or feature for Mathz
+title: '[Feature]: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: Tell us about the feature you would like to see in Mathz!
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: Feature Description
+      description: Is your feature request related to a problem? Please describe.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe how you envision this feature working in Mathz blocks or UI.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Describe any alternative solutions or features you have considered.
+    validations:
+      required: false

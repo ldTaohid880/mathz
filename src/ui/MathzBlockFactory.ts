@@ -20,7 +20,24 @@ import { UserFunctionStore } from '../statements/UserFunctionStore';
 import type { IStatementClassifier } from '../statements/StatementClassifier';
 import type { BlockLocation, INoteWriter } from './INoteWriter';
 import type { INotifier } from './INotifier';
+import type { IImageExporter } from './IImageExporter';
+import type { IVisibilityObserver } from '../core/IVisibilityObserver';
 import { SliderPanelView } from './SliderPanelView';
+
+export function buildGraphAriaLabel(title: string | undefined, visibleLines: string[]): string {
+	const cleanedLines = visibleLines
+		.map((line) => line.replace(/\/\/.*/, '').trim())
+		.filter((line) => line.length > 0);
+
+	const prefix = title && title.trim() ? `${title.trim()}. Graph of: ` : 'Graph of: ';
+	const body = cleanedLines.join('; ');
+	let full = prefix + body;
+
+	if (full.length > 300) {
+		full = full.slice(0, 300) + '…';
+	}
+	return full;
+}
 
 export interface IMathzBlockController extends IDisposable {
 	readonly currentSource: string;
@@ -55,6 +72,7 @@ export class MathzBlockController implements IMathzBlockController {
 	private listEl: HTMLElement;
 	private editorEl: HTMLTextAreaElement;
 	private btnSave: HTMLButtonElement;
+	private canvasEl: HTMLCanvasElement;
 	private validEntries: ValidEntry[] = [];
 
 	public constructor(
@@ -71,6 +89,8 @@ export class MathzBlockController implements IMathzBlockController {
 		private readonly notifier?: INotifier,
 		private readonly stateCache?: IBlockStateCache,
 		private readonly location?: BlockLocation,
+		private readonly imageExporter?: IImageExporter,
+		private readonly visibilityObserver?: IVisibilityObserver,
 	) {
 		this.currentSource = initialSource;
 		this.originalSource = initialSource;
@@ -105,17 +125,29 @@ export class MathzBlockController implements IMathzBlockController {
 		const canvas = stage.createEl('canvas', { cls: 'mathz-canvas' });
 		canvas.width = view.size;
 		canvas.height = view.size;
+		canvas.setAttribute('role', 'img');
+		canvas.setAttribute('tabindex', '0');
+		this.canvasEl = canvas;
 
 		const tools = stage.createDiv({ cls: 'mathz-tools' });
 		const btnEdit = tools.createEl('button', { cls: 'mathz-btn', text: '✎' });
 		btnEdit.setAttribute('aria-label', 'Edit equations');
 		btnEdit.setAttribute('title', 'Edit equations');
+		btnEdit.setAttribute('aria-pressed', 'false');
 
 		const btnSave = tools.createEl('button', { cls: 'mathz-btn', text: '💾' });
 		btnSave.setAttribute('aria-label', 'Save to note');
 		btnSave.setAttribute('title', 'Save to note');
 		btnSave.style.display = 'none';
 		this.btnSave = btnSave;
+
+		const btnCopy = tools.createEl('button', { cls: 'mathz-btn', text: '📋' });
+		btnCopy.setAttribute('aria-label', 'Copy graph as image');
+		btnCopy.setAttribute('title', 'Copy graph as image');
+
+		const btnSavePng = tools.createEl('button', { cls: 'mathz-btn', text: '🖼' });
+		btnSavePng.setAttribute('aria-label', 'Save graph as PNG');
+		btnSavePng.setAttribute('title', 'Save graph as PNG');
 
 		const btnZoomIn = tools.createEl('button', { cls: 'mathz-btn', text: '+' });
 		btnZoomIn.setAttribute('aria-label', 'Zoom in');
@@ -168,6 +200,7 @@ export class MathzBlockController implements IMathzBlockController {
 			this.themeProvider,
 			this.scheduler,
 			this.parameterStore,
+			this.visibilityObserver,
 		);
 		widgetRef = this.widget;
 		this.store.add(this.widget);
@@ -191,10 +224,12 @@ export class MathzBlockController implements IMathzBlockController {
 		btnEdit.addEventListener('click', () => {
 			if (this.editorEl.style.display === 'none') {
 				this.editorEl.style.display = 'block';
+				btnEdit.setAttribute('aria-pressed', 'true');
 				this.adjustEditorHeight();
 				this.editorEl.focus();
 			} else {
 				this.editorEl.style.display = 'none';
+				btnEdit.setAttribute('aria-pressed', 'false');
 			}
 		});
 
@@ -204,6 +239,51 @@ export class MathzBlockController implements IMathzBlockController {
 
 		// Editor events
 		this.setupEditorEvents();
+
+		btnCopy.addEventListener('click', async () => {
+			if (!this.imageExporter) return;
+			btnCopy.disabled = true;
+			btnSavePng.disabled = true;
+			try {
+				const blob = await this.widget.renderToBlob(2);
+				if (!blob) {
+					this.notifier?.error('Failed to export graph image');
+					return;
+				}
+				const res = await this.imageExporter.copy(blob);
+				if (res.ok) {
+					this.notifier?.info(res.detail ?? 'Image copied');
+				} else {
+					this.notifier?.error(res.reason);
+				}
+			} finally {
+				btnCopy.disabled = false;
+				btnSavePng.disabled = false;
+			}
+		});
+
+		btnSavePng.addEventListener('click', async () => {
+			if (!this.imageExporter) return;
+			btnCopy.disabled = true;
+			btnSavePng.disabled = true;
+			try {
+				const blob = await this.widget.renderToBlob(2);
+				if (!blob) {
+					this.notifier?.error('Failed to export graph image');
+					return;
+				}
+				const title = this.extractTitleFromSource();
+				const res = await this.imageExporter.save(blob, title, this.location?.sourcePath);
+				if (res.ok) {
+					this.notifier?.info(res.detail ?? 'Saved PNG');
+				} else {
+					this.notifier?.error(res.reason);
+				}
+			} finally {
+				btnCopy.disabled = false;
+				btnSavePng.disabled = false;
+			}
+		});
 
 		btnZoomIn.addEventListener('click', () => this.widget.zoomIn());
 		btnZoomOut.addEventListener('click', () => this.widget.zoomOut());
@@ -305,7 +385,7 @@ export class MathzBlockController implements IMathzBlockController {
 		// Pass 2: Collect function headers
 		const extraVariables = Array.from(seenSliderNames);
 		const userFunctions = new UserFunctionStore();
-		
+
 		const parsedHeaders: Array<{ name: string, params: string[], line: string, rhsRaw: string, error?: string }> = [];
 		const statementLines: string[] = [];
 
@@ -360,7 +440,7 @@ export class MathzBlockController implements IMathzBlockController {
 				userFunctions.define({ name: header.name, params: header.params, body: null as any, source: header.line, error: header.error });
 				continue;
 			}
-			
+
 			try {
 				// Use classifier just to compile the body
 				const body = this.classifier.classify(`${header.name}(${header.params.join(', ')}) = ${header.rhsRaw}`, {
@@ -386,7 +466,7 @@ export class MathzBlockController implements IMathzBlockController {
 		// Pass 5: Detect cycles
 		const visited = new Set<string>();
 		const visiting = new Set<string>();
-		
+
 		const dfs = (name: string, path: string[]): boolean => {
 			if (visiting.has(name)) {
 				const startIdx = path.indexOf(name);
@@ -427,7 +507,7 @@ export class MathzBlockController implements IMathzBlockController {
 			const code = chip.createEl('code');
 			code.createSpan({ text: 'ƒ', cls: 'mathz-def-glyph' }); // or just prepend to text
 			code.appendText(` ${header.line}`);
-			
+
 			if (def && def.error) {
 				chip.addClass('mathz-error');
 				chip.createEl('small', { text: def.error });
@@ -485,6 +565,7 @@ export class MathzBlockController implements IMathzBlockController {
 						chip.setAttribute('aria-pressed', 'true');
 					}
 					this.updateVisibleStatements();
+					this.updateCanvasAriaLabel();
 				};
 
 				chip.addEventListener('click', toggle);
@@ -504,6 +585,17 @@ export class MathzBlockController implements IMathzBlockController {
 		this.updateSwatches(this.themeProvider.getTheme().palette);
 		this.updateVisibleStatements();
 		this.updateSaveButton();
+		this.updateCanvasAriaLabel();
+	}
+
+	private updateCanvasAriaLabel(): void {
+		if (!this.canvasEl) return;
+		const title = this.extractTitleFromSource();
+		const visibleLines = this.validEntries
+			.filter((entry) => !entry.hidden)
+			.map((entry) => entry.rawText);
+		const label = buildGraphAriaLabel(title, visibleLines);
+		this.canvasEl.setAttribute('aria-label', label);
 	}
 
 	private updateSwatches(palette: readonly string[]): void {
@@ -527,6 +619,16 @@ export class MathzBlockController implements IMathzBlockController {
 		if (!this.btnSave) return;
 		const isDirty = this.currentSource !== this.originalSource;
 		this.btnSave.style.display = isDirty ? 'inline-flex' : 'none';
+	}
+
+	private extractTitleFromSource(): string | undefined {
+		for (const rawLine of this.currentSource.split(/\r?\n/)) {
+			const line = rawLine.trim();
+			if (line.startsWith('@title ')) {
+				return line.slice(7).trim();
+			}
+		}
+		return undefined;
 	}
 
 	private getCacheKey(): string | null {
@@ -597,6 +699,8 @@ export class MathzBlockFactory implements IMathzBlockFactory {
 		private readonly noteWriter?: INoteWriter,
 		private readonly notifier?: INotifier,
 		private readonly stateCache?: IBlockStateCache,
+		private readonly imageExporter?: IImageExporter,
+		private readonly visibilityObserver?: IVisibilityObserver,
 	) {}
 
 	public create(el: HTMLElement, source: string, location?: BlockLocation): IMathzBlockController {
@@ -615,6 +719,8 @@ export class MathzBlockFactory implements IMathzBlockFactory {
 			this.notifier,
 			this.stateCache,
 			location,
+			this.imageExporter,
+			this.visibilityObserver,
 		);
 	}
 }
