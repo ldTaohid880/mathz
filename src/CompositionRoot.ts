@@ -1,4 +1,4 @@
-import type { App } from 'obsidian';
+import type { App, Plugin } from 'obsidian';
 import { BrowserScheduler } from './core/BrowserScheduler';
 import { ConsoleLogger } from './core/ConsoleLogger';
 import { ExplicitRenderer } from './graph/renderers/ExplicitRenderer';
@@ -17,7 +17,10 @@ import { Parser } from './math/Parser';
 import { Tokenizer } from './math/Tokenizer';
 import { ObsidianNoteWriter } from './obsidian/ObsidianNoteWriter';
 import { ObsidianNotifier } from './obsidian/ObsidianNotifier';
+import { ObsidianSettingsStore } from './obsidian/ObsidianSettingsStore';
 import { ObsidianThemeProvider } from './obsidian/ObsidianThemeProvider';
+import { SettingsService } from './settings/SettingsService';
+import type { ISettingsService } from './settings/ISettingsService';
 import { BlockStateCache } from './statements/BlockStateCache';
 import { SliderParser } from './statements/SliderDeclaration';
 import { StatementClassifier } from './statements/StatementClassifier';
@@ -25,10 +28,19 @@ import { MathzBlockFactory } from './ui/MathzBlockFactory';
 
 export class CompositionRoot {
 	private readonly blockStateCache = new BlockStateCache();
+	public readonly settingsService: ISettingsService;
 
-	public constructor(private readonly app: App) {}
+	public constructor(
+		private readonly app: App,
+		plugin?: Plugin,
+	) {
+		const store = plugin ? new ObsidianSettingsStore(plugin) : undefined;
+		this.settingsService = new SettingsService(store);
+	}
 
-	public createBlockFactory(): MathzBlockFactory {
+	public async createBlockFactory(): Promise<MathzBlockFactory> {
+		await this.settingsService.load();
+
 		const logger = new ConsoleLogger();
 		const scheduler = new BrowserScheduler();
 		const notifier = new ObsidianNotifier();
@@ -73,6 +85,7 @@ export class CompositionRoot {
 			noteWriter,
 			notifier,
 			this.blockStateCache,
+			this.settingsService,
 		);
 	}
 }

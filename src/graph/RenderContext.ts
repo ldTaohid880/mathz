@@ -49,6 +49,7 @@ export class RenderContext {
 	public readonly fontFamily: string;
 	public readonly fontSize: number;
 	public params: Readonly<Record<string, number>> = {};
+	public showGrid = true;
 
 	public constructor(
 		public readonly ctx: CanvasRenderingContext2D,

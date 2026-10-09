@@ -12,7 +12,10 @@ import { LabelRenderer } from '../graph/LabelRenderer';
 import { RenderContext } from '../graph/RenderContext';
 import { RendererRegistry } from '../graph/RendererRegistry';
 import { ViewTransform } from '../graph/ViewTransform';
+import type { ISettingsService } from '../settings/ISettingsService';
 import { IBlockStateCache } from '../statements/BlockStateCache';
+import { DirectiveParser } from '../statements/DirectiveParser';
+import type { BlockDirectives, IDirectiveParser } from '../statements/IDirectiveParser';
 import { ParameterStore } from '../statements/ParameterStore';
 import { isParseError, ISliderParser } from '../statements/SliderDeclaration';
 import type { Statement } from '../statements/Statement';
@@ -21,6 +24,7 @@ import type { IStatementClassifier } from '../statements/StatementClassifier';
 import type { BlockLocation, INoteWriter } from './INoteWriter';
 import type { INotifier } from './INotifier';
 import { SliderPanelView } from './SliderPanelView';
+import { IFunctionLibrary } from '../math/IFunctionLibrary';
 
 export interface IMathzBlockController extends IDisposable {
 	readonly currentSource: string;
@@ -38,8 +42,6 @@ interface ValidEntry {
 	hidden: boolean;
 }
 
-import { IFunctionLibrary } from '../math/IFunctionLibrary';
-
 export class MathzBlockController implements IMathzBlockController {
 	private readonly store = new DisposableStore();
 	public currentSource: string;
@@ -52,13 +54,19 @@ export class MathzBlockController implements IMathzBlockController {
 	private sliderPanel: SliderPanelView;
 	private widget: GraphWidget;
 
+	private titleEl: HTMLElement | null = null;
+	private hintEl: HTMLElement;
 	private listEl: HTMLElement;
 	private editorEl: HTMLTextAreaElement;
 	private btnSave: HTMLButtonElement;
 	private validEntries: ValidEntry[] = [];
 
+	private lastViewDirectiveLineText: string | undefined = undefined;
+	private currentDirectives: BlockDirectives = {};
+	private isInitialRender = true;
+
 	public constructor(
-		container: HTMLElement,
+		private readonly container: HTMLElement,
 		initialSource: string,
 		private readonly classifier: IStatementClassifier,
 		private readonly sliderParser: ISliderParser,
@@ -71,13 +79,15 @@ export class MathzBlockController implements IMathzBlockController {
 		private readonly notifier?: INotifier,
 		private readonly stateCache?: IBlockStateCache,
 		private readonly location?: BlockLocation,
+		private readonly settingsService?: ISettingsService,
+		private readonly directiveParser: IDirectiveParser = new DirectiveParser(),
 	) {
 		this.currentSource = initialSource;
 		this.originalSource = initialSource;
 		this.parameterStore = new ParameterStore();
 		this.store.add(this.parameterStore);
 
-		// Left side: Equations list + Sliders panel
+		// Left side: Title + Equations list + Sliders panel
 		const side = container.createDiv({ cls: 'mathz-side' });
 
 		// Textarea editor
@@ -129,12 +139,15 @@ export class MathzBlockController implements IMathzBlockController {
 		btnReset.setAttribute('aria-label', 'Reset view');
 		btnReset.setAttribute('title', 'Reset view');
 
-		stage.createDiv({
+		this.hintEl = stage.createDiv({
 			cls: 'mathz-hint',
 			text: 'drag to pan · ctrl + scroll to zoom · double-click to reset',
 		});
 
-		// Theme provider is injected via constructor
+		// Apply hint visibility from settings
+		if (this.settingsService) {
+			this.hintEl.style.display = this.settingsService.get().showHint ? 'block' : 'none';
+		}
 
 		// Context & Renderers
 		const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -151,9 +164,14 @@ export class MathzBlockController implements IMathzBlockController {
 		const hover = new HoverOverlay(view, rc);
 
 		let widgetRef: GraphWidget | null = null;
-		const interaction = new InteractionController(canvas, view, (sceneChanged) => {
-			widgetRef?.scheduleRepaint(sceneChanged);
-		});
+		const interaction = new InteractionController(
+			canvas,
+			view,
+			(sceneChanged) => {
+				widgetRef?.scheduleRepaint(sceneChanged);
+			},
+			() => this.settingsService?.get().wheelZoom ?? 'modifier',
+		);
 
 		this.widget = new GraphWidget(
 			canvas,
@@ -172,22 +190,6 @@ export class MathzBlockController implements IMathzBlockController {
 		widgetRef = this.widget;
 		this.store.add(this.widget);
 
-		// Restore state from cache if exists
-		const cacheKey = this.getCacheKey();
-		if (cacheKey && this.stateCache) {
-			const cached = this.stateCache.get(cacheKey);
-			if (cached) {
-				this.widget.view.setState(cached.view);
-				for (const [k, v] of Object.entries(cached.sliderValues)) {
-					this.parameterStore.set(k, v);
-				}
-				for (const [eq, hidden] of Object.entries(cached.hiddenEquations)) {
-					this.hiddenStateByText.set(eq, hidden);
-				}
-				this.stateCache.delete(cacheKey);
-			}
-		}
-
 		btnEdit.addEventListener('click', () => {
 			if (this.editorEl.style.display === 'none') {
 				this.editorEl.style.display = 'block';
@@ -202,7 +204,6 @@ export class MathzBlockController implements IMathzBlockController {
 			void this.saveToNote();
 		});
 
-		// Editor events
 		this.setupEditorEvents();
 
 		btnZoomIn.addEventListener('click', () => this.widget.zoomIn());
@@ -215,8 +216,40 @@ export class MathzBlockController implements IMathzBlockController {
 			}),
 		);
 
+		// Subscribe to settings changes
+		if (this.settingsService) {
+			this.store.add(
+				this.settingsService.onChanged.on((settings) => {
+					this.hintEl.style.display = settings.showHint ? 'block' : 'none';
+					if (this.currentDirectives.size === undefined) {
+						this.container.style.setProperty('--mathz-size', `${settings.graphSize}px`);
+					}
+					if (this.currentDirectives.grid === undefined) {
+						rc.showGrid = settings.showGrid;
+						this.widget.scheduleRepaint(true);
+					}
+				}),
+			);
+		}
+
 		// Initial load
 		this.reload(initialSource);
+
+		// State cache restoration: restored view wins over home view on initial load after save
+		const cacheKey = this.getCacheKey();
+		if (cacheKey && this.stateCache) {
+			const cached = this.stateCache.get(cacheKey);
+			if (cached) {
+				this.widget.view.setState(cached.view);
+				for (const [k, v] of Object.entries(cached.sliderValues)) {
+					this.parameterStore.set(k, v);
+				}
+				for (const [eq, hidden] of Object.entries(cached.hiddenEquations)) {
+					this.hiddenStateByText.set(eq, hidden);
+				}
+				this.stateCache.delete(cacheKey);
+			}
+		}
 	}
 
 	private setupEditorEvents(): void {
@@ -261,14 +294,87 @@ export class MathzBlockController implements IMathzBlockController {
 	public reload(source: string): void {
 		this.currentSource = source;
 
-		const lines = source.split(/\r?\n/);
+		const rawLines = source.split(/\r?\n/);
+
+		// Strip comments line by line
+		const commentStrippedLines = rawLines.map((line) => {
+			const commentIdx = line.indexOf('#');
+			if (commentIdx !== -1) {
+				return line.slice(0, commentIdx);
+			}
+			return line;
+		});
+
+		// Parse Directives
+		const { directives, errors: directiveErrors } = this.directiveParser.parse(commentStrippedLines);
+		this.currentDirectives = directives;
+
+		// 1. Title directive
+		const sideEl = this.container.querySelector('.mathz-side');
+		if (directives.title !== undefined) {
+			if (!this.titleEl) {
+				this.titleEl = document.createElement('div');
+				this.titleEl.className = 'mathz-title';
+				if (sideEl) {
+					sideEl.insertBefore(this.titleEl, sideEl.firstChild);
+				}
+			}
+			this.titleEl.textContent = directives.title;
+			this.titleEl.style.display = 'block';
+		} else if (this.titleEl) {
+			this.titleEl.style.display = 'none';
+		}
+
+		// 2. Size directive
+		const size = directives.size ?? this.settingsService?.get().graphSize ?? 420;
+		this.container.style.setProperty('--mathz-size', `${size}px`);
+
+		// 3. Grid directive
+		const showGrid =
+			directives.grid !== undefined
+				? directives.grid
+				: (this.settingsService?.get().showGrid ?? true);
+		if (this.widget) {
+			this.widget['rc'].showGrid = showGrid;
+		}
+
+		// 4. View directive & home view calculation
+		const viewLine = rawLines.find((l) => /^\s*@view\b/i.test(l));
+		const currentViewLineText = viewLine ? viewLine.trim() : undefined;
+		const viewLineChanged = currentViewLineText !== this.lastViewDirectiveLineText;
+		this.lastViewDirectiveLineText = currentViewLineText;
+
+		let homeCx = 0;
+		let homeCy = 0;
+		let homeScale: number;
+
+		if (directives.view) {
+			const { xmin, xmax, ymin, ymax } = directives.view;
+			homeCx = (xmin + xmax) / 2;
+			homeCy = (ymin + ymax) / 2;
+			const xspan = xmax - xmin;
+			const yspan = ymax - ymin;
+			homeScale = this.widget.view.extent / Math.max(xspan, yspan);
+		} else {
+			const halfRange = this.settingsService?.get().viewHalfRange ?? 10;
+			homeCx = 0;
+			homeCy = 0;
+			homeScale = this.widget.view.extent / (2 * halfRange);
+		}
+
+		this.widget.view.setHomeView({ cx: homeCx, cy: homeCy, scale: homeScale });
+
+		if (this.isInitialRender || viewLineChanged) {
+			this.widget.view.setState({ cx: homeCx, cy: homeCy, scale: homeScale });
+		}
+		this.isInitialRender = false;
 
 		// Pass 1: Parse sliders
 		const sliderDecls = [];
 		const sliderErrors = [];
 		const seenSliderNames = new Set<string>();
 
-		for (const rawLine of lines) {
+		for (const rawLine of rawLines) {
 			const line = rawLine.trim();
 			if (!line || line.startsWith('#')) continue;
 
@@ -295,6 +401,16 @@ export class MathzBlockController implements IMathzBlockController {
 		}
 		this.validEntries = [];
 
+		// Render Directive Errors first
+		for (const err of directiveErrors) {
+			const rawLine = rawLines[err.lineIndex] ?? '';
+			const errChip = this.listEl.createEl('li', { cls: 'mathz-chip mathz-error' });
+			errChip.createSpan({ cls: 'mathz-swatch' });
+			errChip.createEl('code', { text: rawLine.trim() });
+			errChip.createEl('small', { text: err.message });
+		}
+
+		// Render Slider Errors next
 		for (const { line, error } of sliderErrors) {
 			const errChip = this.listEl.createEl('li', { cls: 'mathz-chip mathz-error' });
 			errChip.createSpan({ cls: 'mathz-swatch' });
@@ -302,16 +418,22 @@ export class MathzBlockController implements IMathzBlockController {
 			errChip.createEl('small', { text: error });
 		}
 
-		// Pass 2: Collect function headers
+		// Pass 2: Collect function headers (ignoring @ directives)
 		const extraVariables = Array.from(seenSliderNames);
 		const userFunctions = new UserFunctionStore();
-		
-		const parsedHeaders: Array<{ name: string, params: string[], line: string, rhsRaw: string, error?: string }> = [];
+
+		const parsedHeaders: Array<{
+			name: string;
+			params: string[];
+			line: string;
+			rhsRaw: string;
+			error?: string;
+		}> = [];
 		const statementLines: string[] = [];
 
-		for (const rawLine of lines) {
+		for (const rawLine of rawLines) {
 			const line = rawLine.trim();
-			if (!line || line.startsWith('#') || line.startsWith('@slider')) continue;
+			if (!line || line.startsWith('#') || line.startsWith('@')) continue;
 
 			if (line.includes('=')) {
 				const eqIdx = line.indexOf('=');
@@ -326,10 +448,17 @@ export class MathzBlockController implements IMathzBlockController {
 			statementLines.push(line);
 		}
 
-		// Pass 3: Validate headers
+		// Pass 3: Validate function headers
 		const funcNames = new Set<string>();
 		for (const header of parsedHeaders) {
-			if (this.functions.names.has(header.name) || header.name === 'x' || header.name === 'y' || header.name === 'r' || header.name === 'theta' || header.name === 't') {
+			if (
+				this.functions.names.has(header.name) ||
+				header.name === 'x' ||
+				header.name === 'y' ||
+				header.name === 'r' ||
+				header.name === 'theta' ||
+				header.name === 't'
+			) {
 				header.error = `Reserved name: ${header.name}`;
 			} else if (seenSliderNames.has(header.name)) {
 				header.error = `Name collision with slider: ${header.name}`;
@@ -345,7 +474,6 @@ export class MathzBlockController implements IMathzBlockController {
 			}
 		}
 
-		// Tell parser about all arities (including errors, so it can just error on body instead of missing arity)
 		const userFuncArities = new Map<string, number>();
 		for (const header of parsedHeaders) {
 			if (!header.error) {
@@ -353,40 +481,53 @@ export class MathzBlockController implements IMathzBlockController {
 			}
 		}
 
-		// Pass 4: Compile bodies
+		// Pass 4: Compile function bodies
 		for (const header of parsedHeaders) {
 			if (header.error) {
-				// Don't compile if header is invalid
-				userFunctions.define({ name: header.name, params: header.params, body: null as any, source: header.line, error: header.error });
+				userFunctions.define({
+					name: header.name,
+					params: header.params,
+					body: null as any,
+					source: header.line,
+					error: header.error,
+				});
 				continue;
 			}
-			
+
 			try {
-				// Use classifier just to compile the body
-				const body = this.classifier.classify(`${header.name}(${header.params.join(', ')}) = ${header.rhsRaw}`, {
-					extraVariables: extraVariables,
-					userFunctions: userFuncArities,
-					userFunctionStore: userFunctions,
-					isFunctionDefinition: true
-				});
+				const body = this.classifier.classify(
+					`${header.name}(${header.params.join(', ')}) = ${header.rhsRaw}`,
+					{
+						extraVariables,
+						userFunctions: userFuncArities,
+						userFunctionStore: userFunctions,
+						isFunctionDefinition: true,
+					},
+				);
 				if (body.kind === 'function') {
 					userFunctions.define({
 						name: header.name,
 						params: header.params,
 						body: body.body,
-						source: header.line
+						source: header.line,
 					});
 				}
 			} catch (err: unknown) {
 				const message = err instanceof Error ? err.message : String(err);
-				userFunctions.define({ name: header.name, params: header.params, body: null as any, source: header.line, error: message });
+				userFunctions.define({
+					name: header.name,
+					params: header.params,
+					body: null as any,
+					source: header.line,
+					error: message,
+				});
 			}
 		}
 
-		// Pass 5: Detect cycles
+		// Pass 5: Detect circular function definitions
 		const visited = new Set<string>();
 		const visiting = new Set<string>();
-		
+
 		const dfs = (name: string, path: string[]): boolean => {
 			if (visiting.has(name)) {
 				const startIdx = path.indexOf(name);
@@ -419,25 +560,30 @@ export class MathzBlockController implements IMathzBlockController {
 			dfs(name, []);
 		}
 
-		// Render function statements as chips with "ƒ"
+		// Render function statements as chips
 		for (const header of parsedHeaders) {
 			const def = userFunctions.get(header.name);
 			const chip = this.listEl.createEl('li', { cls: 'mathz-chip mathz-def' });
 			chip.createSpan({ cls: 'mathz-swatch' });
 			const code = chip.createEl('code');
-			code.createSpan({ text: 'ƒ', cls: 'mathz-def-glyph' }); // or just prepend to text
+			code.createSpan({ text: 'ƒ', cls: 'mathz-def-glyph' });
 			code.appendText(` ${header.line}`);
-			
+
 			if (def && def.error) {
 				chip.addClass('mathz-error');
 				chip.createEl('small', { text: def.error });
 			} else {
-				// Valid definition
 				this.validEntries.push({
 					rawText: header.line,
-					statement: { kind: 'function', name: header.name, params: header.params, body: def!.body, source: header.line },
+					statement: {
+						kind: 'function',
+						name: header.name,
+						params: header.params,
+						body: def!.body,
+						source: header.line,
+					},
 					chip,
-					hidden: false // def chips are not toggleable
+					hidden: false,
 				});
 			}
 		}
@@ -452,7 +598,7 @@ export class MathzBlockController implements IMathzBlockController {
 				const statement = this.classifier.classify(line, {
 					extraVariables,
 					userFunctions: userFuncArities,
-					userFunctionStore: userFunctions
+					userFunctionStore: userFunctions,
 				});
 				const wasHidden = this.hiddenStateByText.get(line) ?? false;
 				const entry = {
@@ -597,6 +743,8 @@ export class MathzBlockFactory implements IMathzBlockFactory {
 		private readonly noteWriter?: INoteWriter,
 		private readonly notifier?: INotifier,
 		private readonly stateCache?: IBlockStateCache,
+		private readonly settingsService?: ISettingsService,
+		private readonly directiveParser: IDirectiveParser = new DirectiveParser(),
 	) {}
 
 	public create(el: HTMLElement, source: string, location?: BlockLocation): IMathzBlockController {
@@ -615,6 +763,8 @@ export class MathzBlockFactory implements IMathzBlockFactory {
 			this.notifier,
 			this.stateCache,
 			location,
+			this.settingsService,
+			this.directiveParser,
 		);
 	}
 }

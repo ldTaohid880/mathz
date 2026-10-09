@@ -21,11 +21,13 @@ export class InteractionController implements IDisposable {
 	 * @param view The view transform to pan/zoom/reset.
 	 * @param schedule Repaint scheduler: `true` when the scene changed
 	 *   (pan/zoom/reset), `false` for a hover-only redraw.
+	 * @param getWheelZoomMode Dynamic getter for wheel zoom mode ('modifier' vs 'always').
 	 */
 	public constructor(
 		private readonly canvas: HTMLCanvasElement,
 		private readonly view: ViewTransform,
 		private readonly schedule: (sceneChanged: boolean) => void,
+		private readonly getWheelZoomMode?: () => 'modifier' | 'always',
 	) {
 		this.bind();
 	}
@@ -109,7 +111,8 @@ export class InteractionController implements IDisposable {
 				canvas,
 				'wheel',
 				(e) => {
-					if (!e.ctrlKey && !e.metaKey) {
+					const mode = this.getWheelZoomMode ? this.getWheelZoomMode() : 'modifier';
+					if (mode === 'modifier' && !e.ctrlKey && !e.metaKey) {
 						return;
 					}
 					e.preventDefault();

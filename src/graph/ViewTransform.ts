@@ -44,6 +44,10 @@ export class ViewTransform {
 	private cy = 0;
 	private scale: number;
 
+	private homeCx = 0;
+	private homeCy = 0;
+	private homeScale: number;
+
 	public constructor(options: ViewTransformOptions = {}) {
 		this.cellCount = options.cellCount ?? 20;
 		this.cellSize = options.cellSize ?? 30;
@@ -54,6 +58,8 @@ export class ViewTransform {
 		this.size = this.extent_ + 1;
 		this.half = this.extent_ / 2;
 		this.scale = this.cellSize;
+
+		this.homeScale = this.cellSize;
 	}
 
 	public setSize(newSize: number): void {
@@ -143,9 +149,19 @@ export class ViewTransform {
 		this.scale = Math.min(this.maxScale, Math.max(this.minScale, state.scale));
 	}
 
+	public setHomeView(state: { cx: number; cy: number; scale: number }): void {
+		this.homeCx = state.cx;
+		this.homeCy = state.cy;
+		this.homeScale = Math.min(this.maxScale, Math.max(this.minScale, state.scale));
+	}
+
+	public getHomeView(): { cx: number; cy: number; scale: number } {
+		return { cx: this.homeCx, cy: this.homeCy, scale: this.homeScale };
+	}
+
 	public reset(): void {
-		this.cx = 0;
-		this.cy = 0;
-		this.scale = this.cellSize;
+		this.cx = this.homeCx;
+		this.cy = this.homeCy;
+		this.scale = this.homeScale;
 	}
 }

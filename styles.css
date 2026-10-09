@@ -25,6 +25,11 @@
 	flex-direction: column;
 	gap: 12px;
 }
+.mathz-title {
+	font-weight: 600;
+	color: var(--text-normal);
+	margin-bottom: 4px;
+}
 .mathz-editor {
 	width: 100%;
 	min-height: 120px;
@@ -56,8 +61,8 @@
 /* Right column: a definite width, so the canvas can't shrink to its minimum */
 .mathz-stage {
 	position: relative;
-	flex: 0 0 420px;
-	width: 420px;
+	flex: 0 0 var(--mathz-size, 420px);
+	width: var(--mathz-size, 420px);
 	max-width: 100%;
 }
 .mathz-canvas {

@@ -24,6 +24,10 @@ export class GridRenderer {
 		const level = (k: number): number => (k === 0 ? 2 : k % 5 === 0 ? 1 : 0);
 
 		for (let lv = 0; lv < 3; lv++) {
+			// If showGrid is false, skip minor (0) and major (1) grid lines, keeping only axis (2)
+			if (!rc.showGrid && lv < 2) {
+				continue;
+			}
 			for (let k = Math.ceil(xmin / step); k <= Math.floor(xmax / step); k++) {
 				if (level(k) !== lv) continue;
 				const x = view.snap(view.toScreen({ x: k * step, y: 0 }).x);
