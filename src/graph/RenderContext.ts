@@ -51,7 +51,7 @@ export class RenderContext {
 	public params: Readonly<Record<string, number>> = {};
 
 	public constructor(
-		private readonly ctx: CanvasRenderingContext2D,
+		public readonly ctx: CanvasRenderingContext2D,
 		private readonly view: ViewTransform,
 		public theme: GraphTheme = DEFAULT_THEME,
 		options: RenderContextOptions = {},

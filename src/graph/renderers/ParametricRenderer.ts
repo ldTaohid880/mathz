@@ -15,7 +15,7 @@ export class ParametricRenderer implements ICurveRenderer<ParametricStatement> {
 		rc: RenderContext,
 		style: CurveStyle,
 	): void {
-		const { fx, fy } = statement;
+		const { fx, fy, domain } = statement;
 		const [a, b] = [0, Math.PI * 2];
 		const steps = Math.max(2, Math.round((b - a) / 0.01));
 		const pts: Array<ScreenPoint | null> = [];
@@ -24,7 +24,15 @@ export class ParametricRenderer implements ICurveRenderer<ParametricStatement> {
 			const t = a + ((b - a) * i) / steps;
 			const x = fx.evaluate({ ...rc.params, t });
 			const y = fy.evaluate({ ...rc.params, t });
-			pts.push(ok(x) && ok(y) ? view.toScreen({ x, y }) : null);
+
+			let valid = ok(x) && ok(y);
+			if (valid && domain) {
+				if (!domain.test({ ...rc.params, t, x, y })) {
+					valid = false;
+				}
+			}
+
+			pts.push(valid ? view.toScreen({ x, y }) : null);
 		}
 		rc.strokeCurve(pts, style.color, style.width);
 	}

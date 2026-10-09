@@ -1,5 +1,7 @@
 import type { CompiledExpression } from '../math/CompiledExpression';
 import type { IExpressionCompiler } from '../math/IExpressionCompiler';
+import { ConditionParser } from './ConditionParser';
+import type { IConditionParser } from './IConditionParser';
 import type { Statement } from './Statement';
 
 import type { IUserFunctionStore } from './IUserFunctionStore';
@@ -20,13 +22,15 @@ export interface IStatementClassifier {
 	classify(equation: string, extraVariablesOrOptions?: readonly string[] | ClassifyOptions): Statement;
 }
 
-/**
- * Exact port of the original `Graph#compile` dispatch logic:
- * parametric (comma-split) -> polar ("r = ...") -> explicit ("x = ..." / "y = ..."
- * when the other variable is unused) -> implicit fallback.
- */
 export class StatementClassifier implements IStatementClassifier {
-	public constructor(private readonly compiler: IExpressionCompiler) {}
+	private readonly conditionParser: IConditionParser;
+
+	public constructor(
+		private readonly compiler: IExpressionCompiler,
+		conditionParser?: IConditionParser,
+	) {
+		this.conditionParser = conditionParser ?? new ConditionParser(compiler);
+	}
 
 	public classify(
 		equation: string,
@@ -41,6 +45,119 @@ export class StatementClassifier implements IStatementClassifier {
 		const userFunctionStore = options.userFunctionStore;
 
 		const trimmed = equation.trim();
+
+		// Check and extract domain text if present
+		const { bodyText, domainText } = this.extractDomain(trimmed);
+
+		const stmt = this.classifyBody(bodyText, options, extraVariables, userFunctions, userFunctionStore);
+
+		if (domainText !== undefined) {
+			if (stmt.kind === 'point' || stmt.kind === 'function') {
+				throw new Error("Domains aren't supported on points or function definitions");
+			}
+
+			let allowedVars: string[];
+			if (stmt.kind === 'parametric') {
+				allowedVars = ['x', 'y', 't'];
+			} else if (stmt.kind === 'polar') {
+				allowedVars = ['x', 'y', 'theta'];
+			} else {
+				allowedVars = ['x', 'y'];
+			}
+
+			const condResult = this.conditionParser.parse(domainText, allowedVars, options);
+			if ('error' in condResult) {
+				throw new Error(condResult.error);
+			}
+
+			return {
+				...stmt,
+				domain: condResult,
+			} as Statement;
+		}
+
+		return stmt;
+	}
+
+	private extractDomain(trimmed: string): { bodyText: string; domainText?: string } {
+		let inString = false;
+		let openBraceIdx = -1;
+		let closeBraceIdx = -1;
+		let braceCount = 0;
+
+		for (let i = 0; i < trimmed.length; i++) {
+			const ch = trimmed[i];
+			if (ch === '"') {
+				inString = !inString;
+			} else if (!inString) {
+				if (ch === '{') {
+					if (openBraceIdx === -1) {
+						openBraceIdx = i;
+					}
+					braceCount++;
+				} else if (ch === '}') {
+					closeBraceIdx = i;
+					braceCount--;
+					if (braceCount < 0) {
+						throw new Error('Unmatched { or }');
+					}
+				}
+			}
+		}
+
+		if (inString) {
+			return { bodyText: trimmed };
+		}
+
+		if (braceCount !== 0) {
+			throw new Error('Unmatched { or }');
+		}
+
+		if (openBraceIdx === -1) {
+			return { bodyText: trimmed };
+		}
+
+		if (closeBraceIdx !== trimmed.length - 1 || braceCount !== 0) {
+			throw new Error('Unmatched { or }');
+		}
+
+		const bodyText = trimmed.slice(0, openBraceIdx).trim();
+		const domainText = trimmed.slice(openBraceIdx + 1, closeBraceIdx).trim();
+
+		if (!domainText) {
+			throw new Error('Empty domain');
+		}
+
+		// Ensure bodyText and domainText have no remaining top-level braces
+		if (this.hasUnquotedBrace(bodyText) || this.hasUnquotedBrace(domainText)) {
+			throw new Error('Unmatched { or }');
+		}
+
+		return { bodyText, domainText };
+	}
+
+	private hasUnquotedBrace(text: string): boolean {
+		let inString = false;
+		for (let i = 0; i < text.length; i++) {
+			const ch = text[i];
+			if (ch === '"') inString = !inString;
+			else if (!inString && (ch === '{' || ch === '}')) return true;
+		}
+		return false;
+	}
+
+	private classifyBody(
+		trimmed: string,
+		options: ClassifyOptions,
+		extraVariables: readonly string[],
+		userFunctions?: Readonly<Record<string, number>> | ReadonlyMap<string, number>,
+		userFunctionStore?: IUserFunctionStore,
+	): Statement {
+		// Inequality rule (before equations)
+		const ineq = this.tryClassifyInequality(trimmed, extraVariables, userFunctions, userFunctionStore);
+		if (ineq) {
+			return ineq;
+		}
 
 		// Function definition rule:
 		// Text before first '=' must match name(ident {, ident}) where name and every param are valid identifiers
@@ -74,11 +191,11 @@ export class StatementClassifier implements IStatementClassifier {
 			}
 		}
 
-		if (equation.includes(',')) {
-			return this.classifyParametric(equation, extraVariables, userFunctions, userFunctionStore);
+		if (trimmed.includes(',')) {
+			return this.classifyParametric(trimmed, extraVariables, userFunctions, userFunctionStore);
 		}
 
-		const sides = equation.split('=');
+		const sides = trimmed.split('=');
 		if (sides.length !== 2) {
 			throw new Error('Use the form "y = ..." or "x^2 + y^2 = 25"');
 		}
@@ -116,6 +233,88 @@ export class StatementClassifier implements IStatementClassifier {
 			userFunctionStore,
 		});
 		return { kind: 'implicit', left, right };
+	}
+
+	private tryClassifyInequality(
+		trimmed: string,
+		extraVariables: readonly string[],
+		userFunctions?: Readonly<Record<string, number>> | ReadonlyMap<string, number>,
+		userFunctionStore?: IUserFunctionStore,
+	): Statement | null {
+		interface FoundOp {
+			op: string;
+			index: number;
+			length: number;
+		}
+
+		const opsFound: FoundOp[] = [];
+		let hasIsolatedEqual = false;
+		let inString = false;
+		let depth = 0;
+
+		for (let i = 0; i < trimmed.length; i++) {
+			const ch = trimmed[i];
+			if (ch === '"') {
+				inString = !inString;
+			} else if (ch === '(') {
+				depth++;
+			} else if (ch === ')') {
+				depth--;
+			} else if (!inString && depth === 0) {
+				const twoChar = trimmed.slice(i, i + 2);
+				if (twoChar === '<=' || twoChar === '>=') {
+					opsFound.push({ op: twoChar, index: i, length: 2 });
+					i++;
+					continue;
+				}
+				if (ch === '≤' || ch === '≥' || ch === '<' || ch === '>') {
+					opsFound.push({ op: ch, index: i, length: 1 });
+					continue;
+				}
+				if (ch === '=') {
+					hasIsolatedEqual = true;
+				}
+			}
+		}
+
+		if (opsFound.length > 1) {
+			throw new Error("Chained inequalities aren't supported yet. Try: x > 1 {x < 3}");
+		}
+
+		if (opsFound.length === 1) {
+			if (hasIsolatedEqual) {
+				throw new Error("Chained inequalities aren't supported yet. Try: x > 1 {x < 3}");
+			}
+
+			const found = opsFound[0];
+			const leftStr = trimmed.slice(0, found.index).trim();
+			const rightStr = trimmed.slice(found.index + found.length).trim();
+
+			if (!leftStr || !rightStr) {
+				throw new Error('Both sides of the inequality need an expression');
+			}
+
+			let op: '<' | '<=' | '>' | '>=';
+			if (found.op === '<') op = '<';
+			else if (found.op === '>') op = '>';
+			else if (found.op === '<=' || found.op === '≤') op = '<=';
+			else op = '>=';
+
+			const left = this.compiler.compile(leftStr, {
+				variableNames: ['x', 'y', ...extraVariables],
+				userFunctions,
+				userFunctionStore,
+			});
+			const right = this.compiler.compile(rightStr, {
+				variableNames: ['x', 'y', ...extraVariables],
+				userFunctions,
+				userFunctionStore,
+			});
+
+			return { kind: 'inequality', left, right, op };
+		}
+
+		return null;
 	}
 
 	private tryClassifyPoint(
@@ -263,9 +462,7 @@ export class StatementClassifier implements IStatementClassifier {
 		const side = (name: string): CompiledExpression => {
 			const p = parts.find((q) => q[0].trim().toLowerCase() === name);
 			if (!p) {
-				throw new Error(
-					'Parametric form needs both "x = ..." and "y = ..."',
-				);
+				throw new Error('Parametric form needs both "x = ..." and "y = ..."');
 			}
 			return this.compiler.compile(p[1], {
 				variableNames: ['t', ...extraVariables],

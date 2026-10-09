@@ -15,7 +15,7 @@ export class ExplicitRenderer implements ICurveRenderer<ExplicitStatement> {
 		rc: RenderContext,
 		style: CurveStyle,
 	): void {
-		const { axis, fn } = statement;
+		const { axis, fn, domain } = statement;
 		const dep: 'x' | 'y' = axis === 'x' ? 'y' : 'x';
 		const pts: Array<ScreenPoint | null> = [];
 		let prev: ScreenPoint | null = null;
@@ -23,9 +23,17 @@ export class ExplicitRenderer implements ICurveRenderer<ExplicitStatement> {
 		for (let s = 0; s <= view.size; s++) {
 			const t = axis === 'x' ? view.toWorld(s, 0).x : view.toWorld(0, s).y;
 			const v = fn.evaluate(axis === 'x' ? { ...rc.params, x: t } : { ...rc.params, y: t });
-			const q = Number.isFinite(v)
-				? view.toScreen(axis === 'x' ? { x: t, y: v } : { x: v, y: t })
-				: null;
+
+			let valid = Number.isFinite(v);
+			if (valid && domain) {
+				const scope =
+					axis === 'x' ? { ...rc.params, x: t, y: v } : { ...rc.params, x: v, y: t };
+				if (!domain.test(scope)) {
+					valid = false;
+				}
+			}
+
+			const q = valid ? view.toScreen(axis === 'x' ? { x: t, y: v } : { x: v, y: t }) : null;
 
 			if (!q || Math.abs(q[dep]) > 1e6) {
 				pts.push(null);

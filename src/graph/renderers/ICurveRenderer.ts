@@ -14,5 +14,6 @@ export interface CurveStyle {
  * current `view` fresh each time, so pan/zoom are reflected automatically).
  */
 export interface ICurveRenderer<T> {
+	readonly layer?: number;
 	render(statement: T, view: ViewTransform, rc: RenderContext, style: CurveStyle): void;
 }
